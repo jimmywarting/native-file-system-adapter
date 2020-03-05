@@ -13,9 +13,9 @@ This polyfill/ponyfill ships with 4 filesystem backends:
 
 
 The api is designed in such a way that it can work with or without the ponyfill if you choose to remove or add this
-It's not trying to interfear with the chaning spec by using other arguments/properties that may conflict with the feature changes to the spec
+It's not trying to interfear with the chaning spec by using other arguments/properties that may conflict with the feature changes to the spec none spec options are prefixed with a `_`
 
-( The current minium supported browser I have choosen to support is the ones that can handle import/export )
+( The current minium supported browser I have choosen to support is the ones that can handle import/export )<br>
 ( Some parts are lazy loaded when needed )
 
 ### Using
@@ -64,7 +64,7 @@ const fileHandle = await chooseFileSystemEntries({
   ],
   excludeAcceptAllOption: true,
   _preferPolyfill: false,
-  _name: 'Untitled.png',
+  _name: 'Untitled.png', // the name being used when preferPolyfill is true or native is unavalible
 })
 
 const extensionChosen = fileHandle.name.split('.').pop()
