@@ -27,7 +27,7 @@ It's not trying to interfear with the chaning spec by using other arguments/prop
 ```
 
 ```js
-import { chooseFileSystemEntries, FileSystemDirectoryHandle } from './src/es6.js'
+import { chooseFileSystemEntries, FileSystemDirectoryHandle } from 'https://cdn.jsdelivr.net/gh/jimmywarting/native-file-system-adapter/src/es6.js'
 
 // pick a file
 const fileHandle = await chooseFileSystemEntries({
