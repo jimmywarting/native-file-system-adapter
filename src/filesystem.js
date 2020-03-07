@@ -32,24 +32,9 @@ async function chooseFileSystemEntries (options = {}) {
   }
 
   if (opts.type === 'saveFile') {
-    return {
-      name: opts._name,
-      isDirectory: false,
-      isFile: true,
-      async createWritable () {
-        // Planing on maybe incoperate StreamSaver into this polyfill
-        // - Without mitm
-        // - Direct communication to service worker
-        // - No http hack support
-        // Maybe going to use the memory adapter with some tweeks also.
-        // instad of mocking a filehandle with a simple object look alike.
-        if (!globalThis.streamSaver) throw new Error('Requires streamSaver.js for now')
-        return globalThis.streamSaver.createWriteStream(opts._name)
-      },
-      async getFile () { throw new Error('not implemented') },
-      async queryPermission() { return 'denied' },
-      async requestPermission() { return 'denied' }
-    }
+    const FileSystemFileHandle = await import('./FileSystemFileHandle.js').then(d => d.default)
+    const { FileHandle } = await import('./adapters/downloader.js')
+    return new FileSystemFileHandle(new FileHandle(opts._name))
   }
 
   const input = document.createElement('input')
@@ -59,16 +44,12 @@ async function chooseFileSystemEntries (options = {}) {
   // input.accepts = opts.accepts[0].extensions
   input.accept = opts.accepts.map(e => [...(e.extensions || []).map(e=>'.'+e), ...e.mimeTypes || []]).flat().join(',')
 
-
   return new Promise(rs => {
-    const p = import('./FileSystemDirectoryHandle.js')
+    const p = import('./util.js').then(m => m.fromInput)
     // Detecting cancel btn is hard :[
     // there exist some browser hacks but they are vary diffrent,
     // hacky or no good.
-    input.onchange = () => rs(p.then(m =>
-      m.default.getSystemDirectory({ type: input })
-    ))
-
+    input.onchange = () => rs(p.then(fn => fn(input)))
     input.click()
   })
 }

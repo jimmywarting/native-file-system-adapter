@@ -11,7 +11,6 @@ This polyfill/ponyfill ships with 4 filesystem backends:
 * `IndexedDB`: Stores files into the browser's `IndexedDB` object database.
 * `Memory`: Stores files in-memory. Thus, it is a temporary file store that clears when the user navigates away.
 
-
 The api is designed in such a way that it can work with or without the ponyfill if you choose to remove or add this.<br>
 It's not trying to interfear with the chaning spec by using other arguments/properties that may conflict with the feature changes to the spec. A few none spec options are prefixed with a `_`
 
@@ -19,7 +18,7 @@ It's not trying to interfear with the chaning spec by using other arguments/prop
 ( Some parts are lazy loaded when needed )
 
 ### Using
-Please not that this is an on going trail/beta and changes may occurr 
+Please not that this is an on going trail/beta and changes may occurr
 
 ```html
 <script src="https://cdn.jsdelivr.net/npm/web-streams-polyfill@2.1.0/dist/ponyfill.min.js"></script>
@@ -28,7 +27,7 @@ Please not that this is an on going trail/beta and changes may occurr
 ```
 
 ```js
-import { chooseFileSystemEntries, FileSystemDirectoryHandle } 
+import { chooseFileSystemEntries, FileSystemDirectoryHandle }
 from 'https://cdn.jsdelivr.net/gh/jimmywarting/native-file-system-adapter/src/es6.js'
 
 // pick a file
@@ -85,16 +84,22 @@ PS: storing a file handle in IndexedDB or sharing it with postMessage isn't curr
 
 ### A note when downloading with the polyfilled version
 
-I'm barly mimicing what the native version can do. But plan to imporove it a bit later.
+Saving/downloading a file borrowing some of ideas from [StreamSaver.js](https://github.com/jimmywarting/StreamSaver.js).
+The difference is:
+ - Using service worker is optional choice with this adapter. 🤷‍
+ - It dose not rely on some man-in-the-middle or external hosted service worker.
+ - If you want to stream large data to the disk directly instead of taking up much RAM you need to set up a service worker yourself.<br>(note that it requires https - but again worker is optional)
+ - You don't have to handle web-streams-polyfills it's lazy loaded when needed when you need that writable stream. 😴
 
-Saving/downloading a file utilize [StreamSaver.js](https://github.com/jimmywarting/StreamSaver.js) when saving file to the disk, So you can write large files.
-So it have to be probably setup first if you want to use this functionallity.
+to set up a service worker you have to basically copy [the example](https://github.com/jimmywarting/native-file-system-adapter/tree/master/example/sw.js) and register it:
 
-You can't seek or truncate a file. You have to write the data in sequental order as a Readable byte stream
+```js
+navigator.serviceWorker.register('sw.js')
+```
 
-You can't write blob/files/strings/arraybuffer as you can do with the native version (yet)
+Without service worker you are going to write all data to the memory and download it once it closes.
 
-I'm planning on maybe incopirate some of StreamSaver's functionallity to this lib. But for now it gets the job done.
+Seeking and truncating won't do anything. You should be writing all data in sequental order when using the polyfilled version.
 
 -----
 

@@ -1,3 +1,7 @@
+import { errors } from '../util.js'
+
+const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX, SECURITY, DISALLOWED } = errors
+
 class Sink {
   constructor(writer, someklass) {
     this.writer = writer
@@ -50,10 +54,12 @@ class Sink {
   }
 }
 
-class FileHandle {
-  isFile = true
-  constructor(file) {
+export class FileHandle {
+  constructor (file, writable = true) {
     this.file = file
+    this.isFile = true
+    this.writable = writable
+    this.readable = true
   }
   get name () {
     return this.file.name
@@ -62,34 +68,37 @@ class FileHandle {
     return new Promise((rs, rj) => this.file.file(rs, rj))
   }
   createWritable (opts) {
+    if (!this.writable) throw new DOMException(...DISALLOWED)
+
     return new Promise((rs, rj) =>
-    this.file.createWriter(e => {
-      if (opts.keepExistingData === false) {
-        e.onwriteend = evt => rs(new Sink(e, this.file))
-        e.truncate(0)
-      } else {
-        rs(new Sink(e, this.file))
-      }
-    }, rj))
+      this.file.createWriter(e => {
+        if (opts.keepExistingData === false) {
+          e.onwriteend = evt => rs(new Sink(e, this.file))
+          e.truncate(0)
+        } else {
+          rs(new Sink(e, this.file))
+        }
+      }, rj)
+    )
   }
-  queryPermission = () => 'granted'
-  requestPermission = () => 'granted'
 }
 
-class FolderHandle {
-  constructor(dir) {
+export class FolderHandle {
+  constructor (dir, writable = true) {
     this.dir = dir
+    this.writable = writable
+    this.readable = true
   }
-  get isFile() {
+  get isFile () {
     return false
   }
-  get name() {
+  get name () {
     return this.dir.name
   }
   async * getEntries () {
     const entries = await new Promise((rs, rj) => this.dir.createReader().readEntries(rs, rj))
     for (let x of entries) {
-      yield x.isFile ? new FileHandle(x) : new FolderHandle(x)
+      yield x.isFile ? new FileHandle(x, this.writable) : new FolderHandle(x, this.writable)
     }
   }
   getDirectory (name, opts = {}) {

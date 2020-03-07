@@ -47,7 +47,12 @@
     <!-- this are required for now if you like to save files -->
     <script src="https://cdn.jsdelivr.net/npm/web-streams-polyfill@2.1.0/dist/ponyfill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/streamsaver@2.0.3/StreamSaver.min.js"></script>
-
+    <script>
+    navigator.serviceWorker.register('./sw.js', {
+      // type: 'module',
+      // scope: './'
+    })
+    </script>
     <script type=module src="./test.js"></script>
     <table id="table">
       <caption>Browser storage</caption>
@@ -66,8 +71,8 @@
       <caption>Manual save & open file(s)/directory</caption>
       <thead>
         <tr>
-          <td>Test</td>
-          <td>Native</td>
+          <td>Manual</td>
+          <td>Testing</td>
         </tr>
       </thead>
       <tbody>
@@ -79,7 +84,7 @@ chooseFileSystemEntries(
     <option>openFile</option>
     <option>openDirectory</option>
   </select><span id="$accept">
-  accepts: <textarea rows=8 cols="40" style="vertical-align: middle;"></textarea></span><span id="$multiple" hidden>
+  accepts: <textarea rows=8 cols="35" style="vertical-align: middle;"></textarea></span><span id="$multiple" hidden>
   multiple: <input type="checkbox"></span><span id="$exclude">
   excludeAcceptAllOption: <input type="checkbox"></span><span id="$name">
   _name: <input value="sample.jpeg"></span><span id="$preferPolyfill">
@@ -87,6 +92,23 @@ chooseFileSystemEntries(
 )
           </td>
           <td><button id="$test">test</button></td>
+        </tr>
+        <tr>
+          <td width="1">
+            <center>Drag and drop</center><br>
+            The DataTransfer are very similar to Blinks sandboxed filesystem.
+            so it would be easy to just convert the event to a FileSystemDirectoryHandle
+            and use the sandbox adapter on it.
+            <pre style="background: #fff; box-sizing: border-box; color: #68615e; display: block; height: 100%; overflow-x: auto; padding: 0.5em;"><code style="height: 100%;">elm.ondragover = <span class="hljs-function"><span style="color: #df5320;">evt</span> =&gt;</span> evt.preventDefault()
+elm.ondrop = <span class="hljs-function"><span style="color: #df5320;">evt</span> =&gt;</span> {
+  evt =&gt; evt.preventDefault()
+  FileSystemDirectoryHandle.getSystemDirectory({
+    <span class="hljs-attr">type</span>: <span style="color: #7b9726;">'sandbox'</span>,
+    <span class="hljs-attr">_driver</span>: evt.dataTransfer
+  })
+}</code></pre>
+          </td>
+          <td>Drop anywhere<br>on page</td>
         </tr>
       </tbody>
     </table>

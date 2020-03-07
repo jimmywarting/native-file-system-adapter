@@ -1,12 +1,8 @@
-const INVALID = ['seeking position failed', 'InvalidStateError']
-const GONE = ['A requested file or directory could not be found at the time an operation was processed', 'NotFoundError']
-const MISMATCH = ['The path supplied exists, but was not an entry of requested type.', 'TypeMismatchError']
-const MOD_ERR = ['The object can not be modified in this way.', 'InvalidModificationError']
-const SYNTAX = m => [`Failed to execute 'write' on 'UnderlyingSinkBase': Invalid params passed. ${m}`, 'SyntaxError']
-const SECURITY = ['It was determined that certain files are unsafe for access within a Web application, or that too many calls are being made on file resources.', 'SecurityError']
-const DISALLOWED = ['The request is not allowed by the user agent or the platform in the current context.', 'NotAllowedError']
+import { errors } from '../util.js'
 
-class Sink {
+const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX, SECURITY, DISALLOWED } = errors
+
+export class Sink {
   constructor (fileHandle) {
     this.fileHandle = fileHandle
     this.file = fileHandle.file
@@ -88,6 +84,9 @@ class Sink {
     this.file =
     this.position =
     this.size = null
+    if (this.fileHandle.onclose) {
+      this.fileHandle.onclose(this.fileHandle)
+    }
   }
 }
 
@@ -98,6 +97,7 @@ export class FileHandle {
     this.isFile = true
     this.deleted = false
     this.writable = writable
+    this.readable = true
   }
   getFile () {
     if (this.deleted) throw new DOMException(...GONE)
@@ -108,8 +108,6 @@ export class FileHandle {
     if (this.deleted) throw new DOMException(...GONE)
     return new Sink(this)
   }
-  queryPermission () { return 'granted' }
-  requestPermission (opts) { return 'granted' }
   destroy () {
     this.deleted = true
     this.file = null
@@ -117,11 +115,13 @@ export class FileHandle {
 }
 
 export class FolderHandle {
-  constructor (name) {
+  constructor (name, writable = true) {
     this.name = name
     this.isFile = false
     this.deleted = false
     this.entries = {}
+    this.writable = writable
+    this.readable = true
   }
   async * getEntries () {
     if (this.deleted) throw new DOMException(...GONE)

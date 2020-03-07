@@ -4,16 +4,7 @@ import {
   chooseFileSystemEntries,
   FileSystemDirectoryHandle
 } from '../src/es6.js'
-
-FileSystemDirectoryHandle.getSystemDirectory({
-  type: 'sandbox'
-}).then(handle => {
-  handle.getFile('ss').then(r => {
-    r.createWritable().then(r => {
-      r.getWriter
-    })
-  })
-})
+import { fromDataTransfer } from '../src/util.js'
 
 const Writable = globalThis.WritableStream || WritableStream
 const ReadableStream = globalThis.WritableStream
@@ -592,7 +583,6 @@ t('atomic writes: close() fails when parent directory is removed', async (root) 
   await wfs.write('foo')
   await root.removeEntry('parent_dir', { recursive: true })
   err = await wfs.close().catch(e=>e)
-  console.log(err)
   assert(err.name === 'NotFoundError')
 })
 
@@ -823,6 +813,22 @@ t('commands are queued', async (root) => {
   assert(await getFileSize(handle) === 9)
 })
 
+t('queryPermission(writable=false) returns granted', async (root) => {
+  assert(await root.queryPermission({ writable: false }) === 'granted')
+})
+
+t('queryPermission(writable=true) returns granted', async (root) => {
+  assert(await root.queryPermission({ writable: false }) === 'granted')
+})
+
+t('queryPermission(readable=true) returns granted', async (root) => {
+  assert(await root.queryPermission({ writable: false }) === 'granted')
+})
+
+t('queryPermission(readable=false) returns granted', async (root) => {
+  assert(await root.queryPermission({ writable: false }) === 'granted')
+})
+
 t('Large real data test', async (root) => { return
   const res = await fetch('https://webtorrent.io/torrents/Sintel/Sintel.mp4')
   const fileHandle = await root.getFile('movie.mp4', { create: true })
@@ -852,7 +858,7 @@ function img (format) {
     b.fillRect(0, 0, a.width, a.height);
     return new Promise(rs => {
       a.toBlob(rs, 'image/' + format, 1)
-    }).then(b => b.arrayBuffer()).then(b => new Uint8Array(b))
+    })
 }
 
 const wrapper = manualTest.querySelector('tbody tr')
@@ -870,18 +876,15 @@ $test.onclick = async () => {
   if (opts.multiple) handle = handle[0]
   assert(handle.isFile === ['openFile', 'saveFile'].includes(opts.type))
   assert(handle.isDirectory === (opts.type === 'openDirectory'))
-
   if (opts.type === 'saveFile') {
     const format = handle.name.split('.').pop()
     const image = await img(format)
     const ws = await handle.createWritable()
-    return new ReadableStream({
-      start(ctrl) {
-        ctrl.enqueue(image)
-        ctrl.close()
-      }
-    }).pipeTo(ws)
+    ws.write(image)
+    ws.close()
   }
+
+  console.log('assert succeeded')
 }
 $type.onchange = () => {
   switch ($type.value) {
@@ -1012,3 +1015,48 @@ function streamFromFetch(data) {
 }
 
 init()
+
+globalThis.ondragover = evt => evt.preventDefault()
+globalThis.ondrop = async evt => {
+  evt.preventDefault()
+
+  let result = []
+  let cwd = ''
+
+  // return result.sort()
+
+  try {
+    const root = await FileSystemDirectoryHandle.getSystemDirectory({
+      type: 'sandbox',
+      _driver: evt.dataTransfer
+    })
+    assert(await getDirectoryEntryCount(root) > 0)
+    assert(await root.requestPermission({ writable: true }) === 'denied')
+    const dirs = [root]
+    for (let dir of dirs) {
+      cwd += dir.name + '/'
+      for await (let entry of dir.getEntries()) {
+        // Everything should be read only
+        assert(await entry.requestPermission({ writable: true }) === 'denied')
+        assert(await entry.requestPermission({ readable: true }) === 'granted')
+        if (entry.isFile) {
+          result.push(cwd + entry.name)
+          assert(entry.isFile === true)
+          assert(entry.isDirectory === false)
+          err = await entry.createWritable().catch(e=>e)
+          assert(err.name === 'NotAllowedError')
+        } else {
+          result.push(cwd + entry.name + '/')
+          assert(entry.isFile === false)
+          assert(entry.isDirectory === true)
+          dirs.push(entry)
+        }
+      }
+    }
+    result = JSON.stringify(result.sort(), null, 2)
+    console.log(result)
+    alert('assertion succeed\n' + result)
+  } catch (err) {
+    alert('assertion failed - see console')
+  }
+}

@@ -1,8 +1,6 @@
-const INVALID = ['seeking position failed', 'InvalidStateError']
-const GONE = ['A requested file or directory could not be found at the time an operation was processed', 'NotFoundError']
-const MISMATCH = ['The path supplied exists, but was not an entry of requested type.', 'TypeMismatchError']
-const MOD_ERR = ['The object can not be modified in this way.', 'InvalidModificationError']
-const SYNTAX = m => [`Failed to execute 'write' on 'UnderlyingSinkBase': Invalid params passed. ${m}`, 'SyntaxError']
+import { errors } from '../util.js'
+
+const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX, SECURITY, DISALLOWED } = errors
 
 class Sink {
   constructor (db, id, size, file) {
@@ -95,6 +93,8 @@ class FileHandle {
     this.id = id
     this.name = name
     this.isFile = true
+    this.readable = true
+    this.writable = true
   }
   async getFile () {
     const [tx, table] = store(this.db)
@@ -106,8 +106,6 @@ class FileHandle {
     const file = await this.getFile()
     return new Sink(this.db, this.id, file.size, file)
   }
-  queryPermission() { return 'granted' }
-  requestPermission() { return 'granted' }
 }
 
 function store (db) {
@@ -140,6 +138,8 @@ class FolderHandle {
     this.db = db
     this.name = name
     this.isFile = false
+    this.readable = true
+    this.writable = true
   }
   async * getEntries () {
     const [tx, table] = store(this.db)

@@ -59,6 +59,7 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
    */
   static async getSystemDirectory (options) {
     const err = `Failed to execute 'getSystemDirectory' on 'FileSystemDirectoryHandle': `
+    const { _driver = 'native' } = options
 
     if (!arguments.length) {
       throw new TypeError(err + '1 argument required, but only 0 present.')
@@ -70,49 +71,26 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
       throw new TypeError(err + 'required member type is undefined.')
     }
 
-    if (options.type instanceof HTMLInputElement) {
-      const input = options.type
-      const { FolderHandle, FileHandle } = await import('./adapters/memory.js')
-      let files = Array.from(input.files)
-      if (input.webkitdirectory) {
-        const rootName = files[0].webkitRelativePath.split('/', 1)[0]
-        const root = new FolderHandle(rootName)
-        files.forEach(file => {
-          const path = file.webkitRelativePath.split('/')
-          path.shift()
-          const name = path.pop()
-          const dir = path.reduce((dir, path) => {
-            if (!dir.entries[path]) dir.entries[path] = new FolderHandle(path)
-            return dir.entries[path]
-          }, root)
-          dir.entries[name] = new FileHandle(file.name, file, false)
-        })
-        return new FileSystemDirectoryHandle(root)
-      } else {
-        const files = Array.from(input.files).map(file =>
-          new FileSystemFileHandle(new FileHandle(file.name, file, false))
-        )
-        if (input.multiple) {
-          return files
-        } else {
-          return files[0]
-        }
-      }
+    if (options._driver instanceof DataTransfer) {
+      const entries = [...options._driver.items].map(item =>
+        item.webkitGetAsEntry()
+      )
+      return import('./util.js').then(m => m.fromDataTransfer(entries))
     }
 
     if (options.type !== 'sandbox') {
       throw new TypeError(err + `The provided value '${options.type}' is not a valid enum value of type SystemDirectoryType.`)
     }
 
-    if (options._driver === 'native') {
+    if (_driver === 'native') {
       return globalThis.FileSystemDirectoryHandle.getSystemDirectory(options)
     }
 
-    if (!['indexeddb', 'memory', 'sandbox', 'native'].includes(options._driver)) {
+    if (!['indexeddb', 'memory', 'sandbox', 'native'].includes(_driver)) {
       throw new TypeError('the adapter dont exist')
     }
 
-    let module = await import(`./adapters/${options._driver}.js`)
+    let module = await import(`./adapters/${_driver}.js`)
     const sandbox = await module.default(options)
     return new FileSystemDirectoryHandle(sandbox)
   }

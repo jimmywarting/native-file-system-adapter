@@ -8,12 +8,16 @@ class FileSystemHandle {
     wm.set(this, meta)
   }
 
-  async queryPermission (options) {
-    return wm.get(this).queryPermission(options)
+  async queryPermission (options = {}) {
+    if (options.readable) return 'granted'
+    const handle = wm.get(this)
+    return handle.writable ? 'granted' : 'denied'
   }
 
-  async requestPermission (options) {
-    return wm.get(this).queryPermission(options)
+  async requestPermission (options = {}) {
+    if (options.readable) return 'granted'
+    const handle = wm.get(this)
+    return handle.writable ? 'granted' : 'denied'
   }
 }
 

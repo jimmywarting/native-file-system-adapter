@@ -36,7 +36,6 @@ Object.defineProperty(FileSystemFileHandle.prototype, Symbol.toStringTag, {
 
 Object.defineProperties(FileSystemFileHandle.prototype, {
   createWritable: { enumerable: true },
-  createWriter: { enumerable: true },
   getFile: { enumerable: true }
 })
 
