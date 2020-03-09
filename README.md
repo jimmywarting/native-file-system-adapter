@@ -1,4 +1,4 @@
-# native-file-system adapter (polyfill)
+# Native File System adapter (polyfill)
 
 > This is an in-browser file system that follows [native-file-system](https://wicg.github.io/native-file-system/) and supports storing and retrieving files from various backends.
 
