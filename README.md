@@ -18,13 +18,6 @@ It's not trying to interfear with the chaning spec by using other arguments/prop
 ( Some parts are lazy loaded when needed )
 
 ### Using
-Please not that this is an on going trail/beta and changes may occurr
-
-```html
-<script src="https://cdn.jsdelivr.net/npm/web-streams-polyfill@2.1.0/dist/ponyfill.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/streamsaver@2.0.3/StreamSaver.min.js"></script>
-<script type=module src="your_code.js"></script>
-```
 
 ```js
 import { chooseFileSystemEntries, FileSystemDirectoryHandle }
