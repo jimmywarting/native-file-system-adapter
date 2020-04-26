@@ -38,6 +38,7 @@ function t(n, fn) {
   tr.insertCell()
   tr.insertCell()
   tr.insertCell()
+  tr.insertCell()
 }
 function assert(r) {
   if (!r) throw new Error('Assertion failed')
@@ -919,7 +920,8 @@ async function init () {
     FileSystemDirectoryHandle.getSystemDirectory({ type: 'sandbox', _driver: 'native' }),
     FileSystemDirectoryHandle.getSystemDirectory({ type: 'sandbox', _driver: 'sandbox', _persistent: false }),
     FileSystemDirectoryHandle.getSystemDirectory({ type: 'sandbox', _driver: 'memory' }),
-    FileSystemDirectoryHandle.getSystemDirectory({ type: 'sandbox', _driver: 'indexeddb' })
+    FileSystemDirectoryHandle.getSystemDirectory({ type: 'sandbox', _driver: 'indexeddb' }),
+    FileSystemDirectoryHandle.getSystemDirectory({ type: 'sandbox', _driver: 'cache' })
   ])
   let j = 0
   for (let driver of drivers) {
@@ -949,9 +951,9 @@ function arrayEqual(a1, a2) {
 }
 
 async function cleanupSandboxedFileSystem (root) {
-    for await (let entry of root.getEntries()) {
-        await root.removeEntry(entry.name, { recursive: entry.isDirectory })
-    }
+  for await (let entry of root.getEntries()) {
+    await root.removeEntry(entry.name, { recursive: entry.isDirectory })
+  }
 }
 
 async function getFileSize(handle) {
