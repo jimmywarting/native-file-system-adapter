@@ -41,7 +41,7 @@ const file = await fileHandle.getFile()
 // store a file
 const folderHandle = await FileSystemDirectoryHandle.getSystemDirectory({
   type: 'sandbox',
-  _driver: 'native', // native|sandbox|memory|indexeddb
+  _driver: 'native', // native|sandbox|memory|indexeddb|cache
   _persistent: true, // option for when using blink's sandboxed storage (default=temporary)
 })
 
