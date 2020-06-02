@@ -1,0 +1,98 @@
+<!-- controller.html -->
+<button id="disconnectBtn" style="display: none;">Disconnect</button>
+<button id="stopBtn" style="display: none;">Stop</button>
+<button id="reconnectBtn" style="display: none;">Reconnect</button>
+<button id="presentBtn" style="display: none;">Present</button>
+
+<script>
+  // The Present button is visible if at least one presentation display is available
+  var presentBtn = document.getElementById("presentBtn");
+  // It is also possible to use relative presentation URL e.g. "presentation.html"
+  var presUrls = ["http://example.com/presentation.html",
+                  "http://example.net/alternate.html"];
+  // show or hide present button depending on display availability
+  var handleAvailabilityChange = function(available) {
+    presentBtn.style.display = available ? "inline" : "none";
+  };
+  // Promise is resolved as soon as the presentation display availability is
+  // known.
+  var request = new PresentationRequest(presUrls);
+  request.getAvailability().then(function(availability) {
+    // availability.value may be kept up-to-date by the controlling UA as long
+    // as the availability object is alive. It is advised for the web developers
+    // to discard the object as soon as it's not needed.
+    handleAvailabilityChange(availability.value);
+    availability.onchange = function() { handleAvailabilityChange(this.value); };
+  }).catch(function() {
+    // Availability monitoring is not supported by the platform, so discovery of
+    // presentation displays will happen only after request.start() is called.
+    // Pretend the devices are available for simplicity; or, one could implement
+    // a third state for the button.
+    handleAvailabilityChange(true);
+  });
+
+  let connection;
+
+  // The Disconnect and Stop buttons are visible if there is a connected presentation
+  const stopBtn = document.querySelector("#stopBtn");
+  const reconnectBtn = document.querySelector("#reconnectBtn");
+  const disconnectBtn = document.querySelector("#disconnectBtn");
+
+  stopBtn.onclick = _ => {
+    connection && connection.terminate();
+  };
+
+  disconnectBtn.onclick = _ => {
+    connection && connection.close();
+  };
+
+  function setConnection(newConnection) {
+    // Disconnect from existing presentation, if not attempting to reconnect
+    if (connection && connection != newConnection && connection.state != 'closed') {
+      connection.onclosed = undefined;
+      connection.close();
+    }
+
+    // Set the new connection and save the presentation ID
+    connection = newConnection;
+    localStorage["presId"] = connection.id;
+
+    function showConnectedUI() {
+      // Allow the user to disconnect from or terminate the presentation
+      stopBtn.style.display = "inline";
+      disconnectBtn.style.display = "inline";
+      reconnectBtn.style.display = "none";
+    }
+
+    function showDisconnectedUI() {
+      disconnectBtn.style.display = "none";
+      stopBtn.style.display = "none";
+      reconnectBtn.style.display = localStorage["presId"] ? "inline" : "none";
+    }
+
+    // Monitor the connection state
+    connection.onconnect = _ => {
+      showConnectedUI();
+
+      // Register message handler
+      connection.onmessage = message => {
+        console.log(`Received message: ${message.data}`);
+      };
+
+      // Send initial message to presentation page
+      connection.send("Say hello");
+    };
+
+    connection.onclose = _ => {
+      connection = null;
+      showDisconnectedUI();
+    };
+
+    connection.onterminate = _ => {
+      // Remove presId from localStorage if exists
+      delete localStorage["presId"];
+      connection = null;
+      showDisconnectedUI();
+    };
+  };
+</script>

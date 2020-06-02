@@ -875,9 +875,9 @@ $test.onclick = async () => {
   const handle = await chooseFileSystemEntries(opts)
   assert(Array.isArray(handle) === !!opts.multiple)
   if (opts.multiple) handle = handle[0]
-  assert(handle.isFile === ['openFile', 'saveFile'].includes(opts.type))
-  assert(handle.isDirectory === (opts.type === 'openDirectory'))
-  if (opts.type === 'saveFile') {
+  assert(handle.isFile === ['open-file', 'save-file'].includes(opts.type))
+  assert(handle.isDirectory === (opts.type === 'open-directory'))
+  if (opts.type === 'save-file') {
     const format = handle.name.split('.').pop()
     const image = await img(format)
     const ws = await handle.createWritable()
@@ -889,19 +889,19 @@ $test.onclick = async () => {
 }
 $type.onchange = () => {
   switch ($type.value) {
-    case 'saveFile':
+    case 'save-file':
       $accept.hidden =
       $exclude.hidden =
       $name.hidden = false
       $multiple.hidden = true
       return
-    case 'openDirectory':
+    case 'open-directory':
       $exclude.hidden =
       $multiple.hidden =
       $accept.hidden =
       $name.hidden = true
       return
-    case 'openFile':
+    case 'open-file':
       $exclude.hidden =
       $multiple.hidden =
       $accept.hidden = false

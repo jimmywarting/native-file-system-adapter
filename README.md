@@ -25,7 +25,7 @@ from 'https://cdn.jsdelivr.net/gh/jimmywarting/native-file-system-adapter/src/es
 
 // pick a file
 const fileHandle = await chooseFileSystemEntries({
-  type: 'openFile', // default
+  type: 'open-file', // default
   accepts: [
     { extensions: ['jpg'] },
     { extensions: ['webp'] },
@@ -50,7 +50,7 @@ await fileHandle.write(file)
 
 // save/download a file
 const fileHandle = await chooseFileSystemEntries({
-  type: 'saveFile'
+  type: 'save-file'
   accepts: [
     { extensions: ['jpg'] },
     { extensions: ['webp'] },
@@ -96,8 +96,8 @@ Seeking and truncating won't do anything. You should be writing all data in sequ
 
 -----
 
-If you have chosen to `openDirectory` when the polyfilled version is in use (`input[webkitdirectory]`)
-than you can't get any write access to it. So unless you are using chanary with experimental flags or enabled the [Origin Trials](https://github.com/GoogleChrome/OriginTrials/blob/gh-pages/developer-guide.md) for beta testing on your origin, then you better use `saveFile` instead to be safe. It's also possible to query/request permission.
+If you have chosen to `open-directory` when the polyfilled version is in use (`input[webkitdirectory]`)
+than you can't get any write access to it. So unless you are using chanary with experimental flags or enabled the [Origin Trials](https://github.com/GoogleChrome/OriginTrials/blob/gh-pages/developer-guide.md) for beta testing on your origin, then you better use `save-file` instead to be safe. It's also possible to query/request permission.
 
 ### Testing
 

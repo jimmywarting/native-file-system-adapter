@@ -86,7 +86,7 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
       return globalThis.FileSystemDirectoryHandle.getSystemDirectory(options)
     }
 
-    if (!['indexeddb', 'memory', 'sandbox', 'native'].includes(_driver)) {
+    if (!['indexeddb', 'memory', 'sandbox', 'native', 'cache'].includes(_driver)) {
       throw new TypeError('the adapter dont exist')
     }
 
