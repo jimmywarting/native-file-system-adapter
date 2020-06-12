@@ -103,6 +103,9 @@ than you can't get any write access to it. So unless you are using chanary with 
 
 start up a server and open `/examples/test.html` in your browser.
 
+### Alternatives
+A similar, more like a shim library called [browser-nativefs](https://github.com/GoogleChromeLabs/browser-nativefs) (without `getSystemDirectory`) is provided by [@tomayac](https://github.com/tomayac).
+
 ### Resources
 
 I recommend to follow up on this links for you to learn more about the API and how it works
