@@ -120,4 +120,4 @@ I recommend to follow up on this links for you to learn more about the API and h
 
 ### License
 
-native-file-system polyfill is licensed under the MIT License. See `LICENSE` for details.
+native-file-system-adapter is licensed under the MIT License. See `LICENSE` for details.
