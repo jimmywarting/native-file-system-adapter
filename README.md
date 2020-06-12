@@ -4,15 +4,16 @@
 
 ### Adapters
 
-This polyfill/ponyfill ships with 4 filesystem backends:
+This polyfill/ponyfill ships with 5 filesystem backends:
 
 * `native`: Stores files the `Native Sandboxed` file storage
 * `Sandbox`: Stores files into the Blinks `Sandboxed FileSystem` API.
 * `IndexedDB`: Stores files into the browser's `IndexedDB` object database.
 * `Memory`: Stores files in-memory. Thus, it is a temporary file store that clears when the user navigates away.
+* `Cache storage`: Stores files in cache storage like a request/response a-like.
 
 The api is designed in such a way that it can work with or without the ponyfill if you choose to remove or add this.<br>
-It's not trying to interfear with the chaning spec by using other arguments/properties that may conflict with the feature changes to the spec. A few none spec options are prefixed with a `_`
+It's not trying to interfear with the changing spec by using other arguments/properties that may conflict with the feature changes to the spec. A few none spec options are prefixed with a `_`
 
 ( The current minium supported browser I have choosen to support is the ones that can handle import/export )<br>
 ( Some parts are lazy loaded when needed )
