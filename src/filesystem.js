@@ -1,7 +1,7 @@
 const ChooseFileSystemEntriesType = [
-  'openFile',
-  'saveFile',
-  'openDirectory'
+  'open-file',
+  'save-file',
+  'open-directory'
 ]
 
 const def = {
