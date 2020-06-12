@@ -31,7 +31,7 @@ async function chooseFileSystemEntries (options = {}) {
     }' is not a valid enum value of type ChooseFileSystemEntriesType.`)
   }
 
-  if (opts.type === 'saveFile') {
+  if (opts.type === 'save-file') {
     const FileSystemFileHandle = await import('./FileSystemFileHandle.js').then(d => d.default)
     const { FileHandle } = await import('./adapters/downloader.js')
     return new FileSystemFileHandle(new FileHandle(opts._name))
@@ -40,7 +40,7 @@ async function chooseFileSystemEntries (options = {}) {
   const input = document.createElement('input')
   input.type = 'file'
   input.multiple = opts.multiple
-  input.webkitdirectory = opts.type === 'openDirectory'
+  input.webkitdirectory = opts.type === 'open-directory'
   // input.accepts = opts.accepts[0].extensions
   input.accept = opts.accepts.map(e => [...(e.extensions || []).map(e=>'.'+e), ...e.mimeTypes || []]).flat().join(',')
 
