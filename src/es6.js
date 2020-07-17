@@ -8,12 +8,12 @@ import FileSystemHandle from './FileSystemHandle.js'
 import FileSystemWritableFileStream from './FileSystemWritableFileStream.js'
 
 export {
-  showDirectoryPicker,
-  showOpenFilePicker,
-  showSaveFilePicker,
-  getOriginPrivateDirectory,
   FileSystemDirectoryHandle,
   FileSystemFileHandle,
   FileSystemHandle,
-  FileSystemWritableFileStream
+  FileSystemWritableFileStream,
+  getOriginPrivateDirectory,
+  showDirectoryPicker,
+  showOpenFilePicker,
+  showSaveFilePicker,
 }
