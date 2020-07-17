@@ -11,6 +11,7 @@ class FileSystemFileHandle extends FileSystemHandle {
 
   /**
    * @param  {Object} [options={}]
+   * @param  {boolean} [options.keepExistingData]
    * @return {Promise<FileSystemWritableFileStream>}
    */
   async createWritable (options = {}) {
