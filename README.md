@@ -28,7 +28,6 @@ export {
   showDirectoryPicker,
   showOpenFilePicker,
   showSaveFilePicker,
-  ,
   FileSystemDirectoryHandle,
   FileSystemFileHandle,
   FileSystemHandle,
@@ -37,12 +36,8 @@ export {
 
 
 // pick a file
-const fileHandle = await chooseFileSystemEntries({
-  accepts: [
-    { extensions: ['jpg'] },
-    { extensions: ['webp'] },
-    { mimeTypes: ['image/png'] }
-  ],
+const fileHandle = await showOpenFilePicker({
+  types: [], // default
   multiple: false, // default
   excludeAcceptAllOption: false, // default
   _preferPolyfill: false // default
