@@ -1,6 +1,6 @@
 import { errors } from '../util.js'
 
-const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX, SECURITY, DISALLOWED } = errors
+const { DISALLOWED } = errors
 
 class Sink {
   constructor(writer, someklass) {
@@ -57,7 +57,7 @@ class Sink {
 export class FileHandle {
   constructor (file, writable = true) {
     this.file = file
-    this.isFile = true
+    this.kind = 'file'
     this.writable = writable
     this.readable = true
   }
@@ -88,12 +88,8 @@ export class FolderHandle {
     this.dir = dir
     this.writable = writable
     this.readable = true
-  }
-  get isFile () {
-    return false
-  }
-  get name () {
-    return this.dir.name
+    this.kind = 'directory'
+    this.name = dir.name
   }
   async * getEntries () {
     const entries = await new Promise((rs, rj) => this.dir.createReader().readEntries(rs, rj))
@@ -101,45 +97,41 @@ export class FolderHandle {
       yield x.isFile ? new FileHandle(x, this.writable) : new FolderHandle(x, this.writable)
     }
   }
-  getDirectory (name, opts = {}) {
+  getDirectoryHandle (name, opts = {}) {
     return new Promise((rs, rj) => {
       this.dir.getDirectory(name, opts, dir => {
         rs(new FolderHandle(dir))
       }, rj)
     })
   }
-  getFile (name, opts = {}) {
+  getFileHandle (name, opts = {}) {
     return new Promise((rs, rj) => this.dir.getFile(name, opts, file => rs(new FileHandle(file)), rj))
   }
   removeEntry (name, opts) {
     return new Promise(async (rs, rj) => {
-      const entry = await this.getDirectory(name).catch(err =>
-        err.name === 'TypeMismatchError' ? this.getFile(name) : err
+      const entry = await this.getDirectoryHandle(name).catch(err =>
+        err.name === 'TypeMismatchError' ? this.getFileHandle(name) : err
       )
 
-      if (entry.isFile === false) {
+      if (entry instanceof Error) {
+        rj(entry)
+      }
+
+      if (entry.kind === 'directory') {
         opts.recursive
           ? entry.dir.removeRecursively(rs, rj)
           : entry.dir.remove(rs, rj)
-      } else if (entry.isFile) {
+      } else if (entry.file) {
         entry.file.remove(rs, rj)
-      } else {
-        rj(entry)
       }
     })
   }
 }
 
-export default (opts = {}) => new Promise((rs,rj) =>
+export default (opts = {}) => new Promise((rs, rj) =>
   globalThis.webkitRequestFileSystem(
     !!opts._persistent, 0,
-    e => rs(new FolderHandle(e.root), console.log(opts)),
+    e => rs(new FolderHandle(e.root)),
     rj
   )
 )
-
-// Used for creating a new FileList in a round-about way
-function FileListItem(files) {
-  for (var b = new ClipboardEvent("").clipboardData || new DataTransfer; c--;) b.items.add(a[c])
-  return b.files
-}

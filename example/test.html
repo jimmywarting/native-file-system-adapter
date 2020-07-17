@@ -63,32 +63,74 @@
       <tbody></tbody>
       <tfoot><tr><th>Total</th><td></td><td></td><td></td><td></td><td></td></tr></tfoot>
     </table>
+    <pre>
+      getOriginPrivateDirectory(),
+      getOriginPrivateDirectory(import('./adapters/sandbox.js'))
+      getOriginPrivateDirectory(import('./adapters/memory.js'))
+      getOriginPrivateDirectory(import('./adapters/indexeddb.js'))
+      getOriginPrivateDirectory(import('./adapters/cache.js'))
+    </pre>
 
+    <form id="form_showDirectoryPicker"></form>
+    <form id="form_showOpenFilePicker"></form>
+    <form id="form_showSaveFilePicker"></form>
     <table id="manualTest">
       <caption>Manual save & open file(s)/directory</caption>
       <thead>
         <tr>
-          <td>Manual</td>
+          <td width="100%">Manual</td>
           <td>Testing</td>
         </tr>
       </thead>
       <tbody>
+        <form>
         <tr>
-          <td style="white-space: pre;">
-chooseFileSystemEntries(
-  type: <select id="$type">
-    <option>save-file</option>
-    <option>open-file</option>
-    <option>open-directory</option>
-  </select><span id="$accept">
-  accepts: <textarea rows=8 cols="35" style="vertical-align: middle;"></textarea></span><span id="$multiple" hidden>
-  multiple: <input type="checkbox"></span><span id="$exclude">
-  excludeAcceptAllOption: <input type="checkbox"></span><span id="$name">
-  _name: <input value="sample.jpeg"></span><span id="$preferPolyfill">
-  _preferPolyfill: <input type="checkbox"></span>
-)
+          <td>
+            showDirectoryPicker({
+            <div title="uses input[type=file][webkitdirectory]">
+              &nbsp; _preferPolyfill: <input form="form_showDirectoryPicker" name="_preferPolyfill" type="checkbox"><br>
+            </div>
+            })
           </td>
-          <td><button id="$test">test</button></td>
+          <td><button form="form_showDirectoryPicker" type="submit">test</button></td>
+        </tr>
+        <tr>
+          <td>
+            showOpenFilePicker({<br>
+              <div title="picks files using input[type=file]">
+                &nbsp; _preferPolyfill: <input form="form_showOpenFilePicker" name="_preferPolyfill" type="checkbox">
+              </div>
+              <div title="make it possible to choose more files">
+                &nbsp; multiple: <input form="form_showOpenFilePicker" name="multiple" type="checkbox">
+              </div>
+              <div title="types is required if using this option">
+                &nbsp; excludeAcceptAllOption: <input form="form_showOpenFilePicker" name="excludeAcceptAllOption" type="checkbox">
+              </div>
+              <div title="">
+                &nbsp; types: <textarea name="types" form="form_showOpenFilePicker" id="$types1" placeholder="[{ accept: { 'image/svg+xml': ['svg'] } }]" rows=1 cols="45" style="vertical-align: top;"></textarea><br>
+              </div>
+            })
+          </td>
+          <td><button form="form_showOpenFilePicker" id="$test">test</button></td>
+        </tr>
+        <tr>
+          <td>
+            showSaveFilePicker({<br>
+              <div title="saves a blob using a[download]">
+                &nbsp; _preferPolyfill: <input form="form_showSaveFilePicker" name="_preferPolyfill" type="checkbox">
+              </div>
+              <div title="_name is used when not using native file system">
+                &nbsp; _name: <input form="form_showSaveFilePicker" name="_name" value="example.webp">
+              </div>
+              <div title="types is required if using this option">
+                &nbsp; excludeAcceptAllOption: <input form="form_showSaveFilePicker" name="excludeAcceptAllOption" type="checkbox">
+              </div>
+              <div title="">
+                &nbsp; types: <textarea name="types" form="form_showSaveFilePicker" id="$types2" placeholder="[{ accept: { 'image/svg+xml': ['svg'] } }]" rows=1 cols="45" style="vertical-align: top;"></textarea><br>
+              </div>
+            })
+          </td>
+          <td><button form="form_showSaveFilePicker" id="$test">test</button></td>
         </tr>
         <tr>
           <td width="1">
@@ -98,11 +140,8 @@ chooseFileSystemEntries(
             and use the sandbox adapter on it.
             <pre style="background: #fff; box-sizing: border-box; color: #68615e; display: block; height: 100%; overflow-x: auto; padding: 0.5em;"><code style="height: 100%;">elm.ondragover = <span class="hljs-function"><span style="color: #df5320;">evt</span> =&gt;</span> evt.preventDefault()
 elm.ondrop = <span class="hljs-function"><span style="color: #df5320;">evt</span> =&gt;</span> {
-  evt =&gt; evt.preventDefault()
-  FileSystemDirectoryHandle.getSystemDirectory({
-    <span class="hljs-attr">type</span>: <span style="color: #7b9726;">'sandbox'</span>,
-    <span class="hljs-attr">_driver</span>: evt.dataTransfer
-  })
+  evt.preventDefault()
+  getOriginPrivateDirectory(evt.dataTransfer)
 }</code></pre>
           </td>
           <td>Drop anywhere<br>on page</td>

@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "noEmit": false,
+    "target": "esnext",
+    "module": "esnext",
+    "declaration": true,
+    "allowJs": true,
+    "checkJs": true,
+    "removeComments": true,
+    "emitDeclarationOnly": true,
+    "lib": ["es2019", "dom"],
+    "outDir": "./types/",
+  },
+  "include": ["src/*.js"],
+}

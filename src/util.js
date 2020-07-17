@@ -1,6 +1,6 @@
 export const errors = {
-  INVALID: ['seeking position failed', 'InvalidStateError'],
-  GONE: ['A requested file or directory could not be found at the time an operation was processed', 'NotFoundError'],
+  INVALID: ['seeking position failed.', 'InvalidStateError'],
+  GONE: ['A requested file or directory could not be found at the time an operation was processed.', 'NotFoundError'],
   MISMATCH: ['The path supplied exists, but was not an entry of requested type.', 'TypeMismatchError'],
   MOD_ERR: ['The object can not be modified in this way.', 'InvalidModificationError'],
   SYNTAX: m => [`Failed to execute 'write' on 'UnderlyingSinkBase': Invalid params passed. ${m}`, 'SyntaxError'],

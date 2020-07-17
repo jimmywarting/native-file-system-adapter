@@ -1,4 +1,4 @@
-# Native File System adapter (polyfill)
+# Native File System adapter (ponyfill)
 
 > This is an in-browser file system that follows [native-file-system](https://wicg.github.io/native-file-system/) and supports storing and retrieving files from various backends.
 
@@ -13,7 +13,7 @@ This polyfill/ponyfill ships with 5 filesystem backends:
 * `Cache storage`: Stores files in cache storage like a request/response a-like.
 
 The api is designed in such a way that it can work with or without the ponyfill if you choose to remove or add this.<br>
-It's not trying to interfear with the changing spec by using other arguments/properties that may conflict with the feature changes to the spec. A few none spec options are prefixed with a `_`
+It's not trying to interfear with the changing spec by using other properties that may conflict with the feature changes to the spec. A few none spec options are prefixed with a `_`
 
 ( The current minium supported browser I have choosen to support is the ones that can handle import/export )<br>
 ( Some parts are lazy loaded when needed )
@@ -21,12 +21,23 @@ It's not trying to interfear with the changing spec by using other arguments/pro
 ### Using
 
 ```js
-import { chooseFileSystemEntries, FileSystemDirectoryHandle }
+import { showOpenFilePicker, getOriginPrivateDirectory }
 from 'https://cdn.jsdelivr.net/gh/jimmywarting/native-file-system-adapter/src/es6.js'
+
+export {
+  showDirectoryPicker,
+  showOpenFilePicker,
+  showSaveFilePicker,
+  ,
+  FileSystemDirectoryHandle,
+  FileSystemFileHandle,
+  FileSystemHandle,
+  FileSystemWritableFileStream
+}
+
 
 // pick a file
 const fileHandle = await chooseFileSystemEntries({
-  type: 'open-file', // default
   accepts: [
     { extensions: ['jpg'] },
     { extensions: ['webp'] },
@@ -40,40 +51,30 @@ const fileHandle = await chooseFileSystemEntries({
 const file = await fileHandle.getFile()
 
 // store a file
-const folderHandle = await FileSystemDirectoryHandle.getSystemDirectory({
-  type: 'sandbox',
-  _driver: 'native', // native|sandbox|memory|indexeddb|cache
-  _persistent: true, // option for when using blink's sandboxed storage (default=temporary)
-})
-
-const fileHandle = await folderHandle.getFile(file.name, { create: true })
+const folderHandle = await getOriginPrivateDirectory()
+const fileHandle = await folderHandle.getFileHandle(file.name, { create: true })
 await fileHandle.write(file)
 
 // save/download a file
-const fileHandle = await chooseFileSystemEntries({
-  type: 'save-file'
-  accepts: [
-    { extensions: ['jpg'] },
-    { extensions: ['webp'] },
-    { mimeTypes: ['image/png'] }
-  ],
-  excludeAcceptAllOption: true,
+const fileHandle = await showSaveFilePicker({
   _preferPolyfill: false,
   _name: 'Untitled.png', // the name being used when preferPolyfill is true or native is unavalible
+  types: {},
+  excludeAcceptAllOption: false,
 })
 
 const extensionChosen = fileHandle.name.split('.').pop()
 
-const image = {
+const blob = {
   jpg: generateCanvas({ type: 'blob', format: 'jpg' }),
   png: generateCanvas({ type: 'blob', format: 'png' }),
   webp: generateCanvas({ type: 'blob', format: 'webp' })
 }[extensionChosen]
 
-await image.stream().pipeTo(fileHandle.getWriter())
+await blob.stream().pipeTo(fileHandle.getWriter())
 ```
 
-PS: storing a file handle in IndexedDB or sharing it with postMessage isn't currently possible.
+PS: storing a file handle in IndexedDB or sharing it with postMessage isn't currently possible unless you use native.
 
 
 ### A note when downloading with the polyfilled version

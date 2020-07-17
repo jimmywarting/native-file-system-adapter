@@ -1,45 +1,9 @@
 import { errors } from '../util.js'
 
-const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX, SECURITY, DISALLOWED } = errors
+const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX } = errors
 
 const DIR = { headers: { 'content-type': 'dir' } }
 const FILE = () => ({ headers: { 'content-type': 'file', 'last-modified': Date.now() } })
-
-// class Sink {
-//   constructor (p) {
-//     this.p = p
-//     this.position = 0
-//   }
-//   flush (ctrl) {
-//     ctrl.terminate()
-//     return this.p
-//   }
-//   async transform (chunk, ctrl) {
-//     if (typeof chunk === 'object') {
-//       if (chunk.type === 'write') {
-//         if (Number.isInteger(chunk.position) && chunk.position >= 0) {
-//           throw new Error('writing with position is not supported')
-//         }
-//         if (!('data' in chunk)) {
-//           throw new DOMException(`Failed to execute 'write' on 'UnderlyingSinkBase': Invalid params passed. write requires a data argument`, 'SyntaxError')
-//         }
-//         chunk = chunk.data
-//       } else if (chunk.type === 'seek') {
-//         throw new Error('seeking is not supported')
-//       } else if (chunk.type === 'truncate') {
-//         throw new Error('truncate is not supported')
-//       }
-//     }
-
-//     const reader = new Response(chunk).body.getReader()
-//     while (true) {
-//       const { value, done } = await reader.read()
-//       if (done) return
-//       this.position += value.length
-//       ctrl.enqueue(value)
-//     }
-//   }
-// }
 
 class Sink {
   constructor (cache, path, file) {
@@ -124,7 +88,7 @@ export class FileHandle {
   constructor (path, cache) {
     this.cache = cache
     this.path = path
-    this.isFile = true
+    this.kind = 'file'
     this.writable = true
     this.readable = true
   }
@@ -154,19 +118,15 @@ export class FolderHandle {
     this.writable = true
     this.readable = true
     this.cache = cache
-  }
-  get isFile () {
-    return false
-  }
-  get name () {
-    return this.dir.split('/').pop()
+    this.kind = 'directory'
+    this.name = dir.split('/').pop()
   }
   async * getEntries () {
     for (let [path, isFile] of Object.entries(await this._tree)) {
       yield isFile ? new FileHandle(path, this.cache) : new FolderHandle(path, this.cache)
     }
   }
-  async getDirectory (name, opts = {}) {
+  async getDirectoryHandle (name, opts = {}) {
     const path = this.dir.endsWith('/') ? this.dir + name : `${this.dir}/${name}`
     const tree = await this._tree
     if (tree.hasOwnProperty(path)) {
@@ -196,7 +156,7 @@ export class FolderHandle {
   _save (tree) {
     return this.cache.put(this.dir, new Response(JSON.stringify(tree), DIR))
   }
-  async getFile (name, opts = {}) {
+  async getFileHandle (name, opts = {}) {
     const path = this.dir.endsWith('/') ? this.dir + name : `${this.dir}/${name}`
     const tree = await this._tree
     if (tree.hasOwnProperty(path)) {

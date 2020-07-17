@@ -1,0 +1,22 @@
+{
+  "name": "native-file-system-adapter",
+  "version": "0.1.0",
+  "description": "Native File System API",
+  "main": "src/es6.js",
+  "directories": {
+    "example": "example"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jimmywarting/native-file-system-adapter.git"
+  },
+  "author": "Jimmy Wärting",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jimmywarting/native-file-system-adapter/issues"
+  },
+  "homepage": "https://github.com/jimmywarting/native-file-system-adapter#readme"
+}

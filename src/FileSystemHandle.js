@@ -2,8 +2,9 @@ const wm = new WeakMap()
 
 class FileSystemHandle {
   constructor (meta) {
-    this.isDirectory = !meta.isFile
-    this.isFile = !!meta.isFile
+    /** @type {"file|directory"} */
+    this.kind = meta.kind
+    /** @type {string} */
     this.name = meta.name
     wm.set(this, meta)
   }

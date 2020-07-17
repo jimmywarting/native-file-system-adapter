@@ -1,7 +1,10 @@
 // @ts-check
 import { WritableStream, ReadableStream as Readable } from 'https://cdn.jsdelivr.net/npm/web-streams-polyfill@2.1.0/dist/ponyfill.es2018.mjs'
 import {
-  chooseFileSystemEntries,
+  showDirectoryPicker,
+  showOpenFilePicker,
+  showSaveFilePicker,
+  getOriginPrivateDirectory,
   FileSystemDirectoryHandle
 } from '../src/es6.js'
 import { fromDataTransfer } from '../src/util.js'
@@ -10,8 +13,6 @@ const Writable = globalThis.WritableStream || WritableStream
 const ReadableStream = globalThis.WritableStream
   ? globalThis.ReadableStream
   : Readable
-
-globalThis.chooseFileSystemEntries = chooseFileSystemEntries
 
 if (!Blob.prototype.text) {
   Blob.prototype.text = function () {
@@ -50,166 +51,160 @@ function tt (n, html) {
   tr.insertCell().appendChild(html())
 }
 
-t('getDirectory(create=false) rejects for non-existing directories', async (root) => {
-  err = await root.getDirectory('non-existing-dir').catch(a=>a)
+t('getDirectoryHandle(create=false) rejects for non-existing directories', async (root) => {
+  err = await root.getDirectoryHandle('non-existing-dir').catch(a=>a)
   assert(err instanceof DOMException)
   assert(err.name === 'NotFoundError')
 })
 
-t('getDirectory(create=true) creates an empty directory', async (root) => {
-  handle = await root.getDirectory('non-existing-dir', { create: true })
-  assert(handle.isFile === false)
-  assert(handle.isDirectory === true)
+t('getDirectoryHandle(create=true) creates an empty directory', async (root) => {
+  handle = await root.getDirectoryHandle('non-existing-dir', { create: true })
+  assert(handle.kind === 'directory')
   assert(handle.name === 'non-existing-dir')
   assert(await getDirectoryEntryCount(handle) === 0)
   arrayEqual(await getSortedDirectoryEntries(root), ['non-existing-dir/'])
 })
 
-t('getDirectory(create=false) returns existing directories', async (root) => {
-  existing_handle = await root.getDirectory('dir-with-contents', { create: true })
+t('getDirectoryHandle(create=false) returns existing directories', async (root) => {
+  existing_handle = await root.getDirectoryHandle('dir-with-contents', { create: true })
   file_handle = await createEmptyFile('test-file', existing_handle)
-  handle = await root.getDirectory('dir-with-contents', { create: false })
-  assert(handle.isFile === false)
-  assert(handle.isDirectory === true)
+  handle = await root.getDirectoryHandle('dir-with-contents', { create: false })
+  assert(handle.kind === 'directory')
   assert(handle.name === 'dir-with-contents')
   arrayEqual(await getSortedDirectoryEntries(handle), ['test-file'])
 })
 
-t('getDirectory(create=true) returns existing directories without erasing', async (root) => {
-  existing_handle = await root.getDirectory('dir-with-contents', { create: true })
-  file_handle = await existing_handle.getFile('test-file', { create: true })
-  handle = await root.getDirectory('dir-with-contents', { create: true })
-  assert(handle.isFile === false)
-  assert(handle.isDirectory === true)
+t('getDirectoryHandle(create=true) returns existing directories without erasing', async (root) => {
+  existing_handle = await root.getDirectoryHandle('dir-with-contents', { create: true })
+  file_handle = await existing_handle.getFileHandle('test-file', { create: true })
+  handle = await root.getDirectoryHandle('dir-with-contents', { create: true })
+  assert(handle.kind === 'directory')
   assert(handle.name === 'dir-with-contents')
   arrayEqual(await getSortedDirectoryEntries(handle), ['test-file'])
 })
 
-t('getDirectory() when a file already exists with the same name', async (root) => {
+t('getDirectoryHandle() when a file already exists with the same name', async (root) => {
   await createEmptyFile('file-name', root)
-  err = await root.getDirectory('file-name').catch(e=>e)
+  err = await root.getDirectoryHandle('file-name').catch(e=>e)
   assert(err.name === 'TypeMismatchError')
-  err = await root.getDirectory('file-name', { create: false }).catch(e=>e)
+  err = await root.getDirectoryHandle('file-name', { create: false }).catch(e=>e)
   assert(err.name === 'TypeMismatchError')
-  err = await root.getDirectory('file-name', {create: true}).catch(e=>e)
+  err = await root.getDirectoryHandle('file-name', {create: true}).catch(e=>e)
 })
 
-t('getDirectory() with empty name', async (root) => {
-  err = await root.getDirectory('', { create: true }).catch(e=>e)
+t('getDirectoryHandle() with empty name', async (root) => {
+  err = await root.getDirectoryHandle('', { create: true }).catch(e=>e)
   assert(err instanceof TypeError)
-  err = await root.getDirectory('', {create: false}).catch(e=>e)
-  assert(err instanceof TypeError)
-})
-
-t('getDirectory(create=true) with empty name', async (root) => {
-  err = await root.getDirectory('.').catch(e=>e)
-  assert(err instanceof TypeError)
-  err = await root.getDirectory('.', { create: true }).catch(e=>e)
+  err = await root.getDirectoryHandle('', {create: false}).catch(e=>e)
   assert(err instanceof TypeError)
 })
 
-t('getDirectory() with ".." name', async (root) => {
+t('getDirectoryHandle(create=true) with empty name', async (root) => {
+  err = await root.getDirectoryHandle('.').catch(e=>e)
+  assert(err instanceof TypeError)
+  err = await root.getDirectoryHandle('.', { create: true }).catch(e=>e)
+  assert(err instanceof TypeError)
+})
+
+t('getDirectoryHandle() with ".." name', async (root) => {
   subdir = await createDirectory('subdir-name', root)
-  err = await subdir.getDirectory('..').catch(e=>e)
+  err = await subdir.getDirectoryHandle('..').catch(e=>e)
   assert(err instanceof TypeError)
-  err = await subdir.getDirectory('..', { create: true }).catch(e=>e)
+  err = await subdir.getDirectoryHandle('..', { create: true }).catch(e=>e)
   assert(err instanceof TypeError)
 })
 
-t('getDirectory(create=false) with a path separator when the directory exists', async (root) => {
+t('getDirectoryHandle(create=false) with a path separator when the directory exists', async (root) => {
   const first_subdir_name = 'first-subdir-name'
   const first_subdir = await createDirectory(first_subdir_name, root)
   const second_subdir_name = 'second-subdir-name'
   await createDirectory(second_subdir_name, first_subdir)
   const path_with_separator = `${first_subdir_name}/${second_subdir_name}`
-  err = await root.getDirectory(path_with_separator).catch(e=>e)
+  err = await root.getDirectoryHandle(path_with_separator).catch(e=>e)
   assert(err instanceof TypeError)
 })
 
-t('getDirectory(create=true) with a path separator', async (root) => {
+t('getDirectoryHandle(create=true) with a path separator', async (root) => {
   const subdir_name = 'subdir-name';
   const subdir = await createDirectory(subdir_name, root);
   const path_with_separator = `${subdir_name}/file_name`;
-  err = await root.getDirectory(path_with_separator, { create: true }).catch(e=>e)
+  err = await root.getDirectoryHandle(path_with_separator, { create: true }).catch(e=>e)
   assert(err instanceof TypeError)
 })
 
-t('getFile(create=false) rejects for non-existing files', async (root) => {
-  err = await root.getFile('non-existing-file').catch(e=>e)
+t('getFileHandle(create=false) rejects for non-existing files', async (root) => {
+  err = await root.getFileHandle('non-existing-file').catch(e=>e)
   assert(err.name === 'NotFoundError')
 })
 
-t('getFile(create=true) creates an empty file for non-existing files', async (root) => {
-  handle = await root.getFile('non-existing-file', { create: true })
-  assert(handle.isFile === true)
-  assert(handle.isDirectory === false)
+t('getFileHandle(create=true) creates an empty file for non-existing files', async (root) => {
+  handle = await root.getFileHandle('non-existing-file', { create: true })
+  assert(handle.kind === 'file')
   assert(handle.name === 'non-existing-file')
   assert(await getFileSize(handle) === 0)
   assert(await getFileContents(handle) === '')
 })
 
-t('getFile(create=false) returns existing files', async (root) => {
+t('getFileHandle(create=false) returns existing files', async (root) => {
   existing_handle = await createFileWithContents('existing-file', '1234567890', root)
-  handle = await root.getFile('existing-file')
-  assert(handle.isFile === true)
-  assert(handle.isDirectory === false)
+  handle = await root.getFileHandle('existing-file')
+  assert(handle.kind === 'file')
   assert(handle.name === 'existing-file')
   assert(await getFileSize(handle) === 10)
   assert(await getFileContents(handle) === '1234567890')
 })
 
-t('getFile(create=true) returns existing files without erasing', async (root) => {
+t('getFileHandle(create=true) returns existing files without erasing', async (root) => {
   existing_handle = await createFileWithContents('file-with-contents', '1234567890', root)
-  handle = await root.getFile('file-with-contents', { create: true })
-  assert(handle.isFile === true)
-  assert(handle.isDirectory === false)
+  handle = await root.getFileHandle('file-with-contents', { create: true })
+  assert(handle.kind === 'file')
   assert(handle.name === 'file-with-contents')
   assert(await getFileSize(handle) === 10)
   assert(await getFileContents(handle) === '1234567890')
 })
 
-t('getFile(create=false) when a directory already exists with the same name', async (root) => {
-  await root.getDirectory('dir-name', { create: true })
-  err = await root.getFile('dir-name').catch(e=>e)
+t('getFileHandle(create=false) when a directory already exists with the same name', async (root) => {
+  await root.getDirectoryHandle('dir-name', { create: true })
+  err = await root.getFileHandle('dir-name').catch(e=>e)
   assert(err.name === 'TypeMismatchError')
 })
 
-t('getFile(create=true) when a directory already exists with the same name', async (root) => {
-  await root.getDirectory('dir-name', { create: true })
-  err = await root.getFile('dir-name', { create: true }).catch(e=>e)
+t('getFileHandle(create=true) when a directory already exists with the same name', async (root) => {
+  await root.getDirectoryHandle('dir-name', { create: true })
+  err = await root.getFileHandle('dir-name', { create: true }).catch(e=>e)
   assert(err.name === 'TypeMismatchError')
 })
 
-t('getFile() with empty name', async (root) => {
-  err = await root.getFile('', {create: true}).catch(e=>e)
+t('getFileHandle() with empty name', async (root) => {
+  err = await root.getFileHandle('', {create: true}).catch(e=>e)
   assert(err instanceof TypeError)
-  err = await root.getFile('', {create: false}).catch(e=>e)
-  assert(err instanceof TypeError)
-})
-
-t('getFile() with "." name', async (root) => {
-  err = await root.getFile('.').catch(e=>e)
-  assert(err instanceof TypeError)
-  err = await root.getFile('.', { create: true }).catch(e=>e)
+  err = await root.getFileHandle('', {create: false}).catch(e=>e)
   assert(err instanceof TypeError)
 })
 
-t('getFile() with ".." name', async (root) => {
-  err = await root.getFile('..').catch(e=>e)
+t('getFileHandle() with "." name', async (root) => {
+  err = await root.getFileHandle('.').catch(e=>e)
   assert(err instanceof TypeError)
-  err = await root.getFile('..', { create: true }).catch(e=>e)
+  err = await root.getFileHandle('.', { create: true }).catch(e=>e)
   assert(err instanceof TypeError)
 })
 
-t('getFile(create=false) with a path separator when the file exists.', async (root) => {
+t('getFileHandle() with ".." name', async (root) => {
+  err = await root.getFileHandle('..').catch(e=>e)
+  assert(err instanceof TypeError)
+  err = await root.getFileHandle('..', { create: true }).catch(e=>e)
+  assert(err instanceof TypeError)
+})
+
+t('getFileHandle(create=false) with a path separator when the file exists.', async (root) => {
   await createDirectory('subdir-name', root)
-  err = await root.getFile(`subdir-name/file_name`).catch(e=>e)
+  err = await root.getFileHandle(`subdir-name/file_name`).catch(e=>e)
   assert(err instanceof TypeError)
 })
 
-t('getFile(create=true) with a path separator', async (root) => {
+t('getFileHandle(create=true) with a path separator', async (root) => {
   await createDirectory('subdir-name', root)
-  err = await root.getFile(`subdir-name/file_name`, {create: true}).catch(e=>e)
+  err = await root.getFileHandle(`subdir-name/file_name`, {create: true}).catch(e=>e)
   assert(err instanceof TypeError)
 })
 
@@ -226,11 +221,12 @@ t('removeEntry() on an already removed file should fail', async (root) => {
   handle = await createFileWithContents('file-to-remove', '12345', root)
   await root.removeEntry('file-to-remove')
   err = await root.removeEntry('file-to-remove').catch(e=>e)
+  console.log(err)
   assert(err.name === 'NotFoundError')
 })
 
 t('removeEntry() to remove an empty directory', async (root) => {
-  handle = await root.getDirectory('dir-to-remove', { create: true })
+  handle = await root.getDirectoryHandle('dir-to-remove', { create: true })
   await createFileWithContents('file-to-keep', 'abc', root)
   await root.removeEntry('dir-to-remove')
   arrayEqual(await getSortedDirectoryEntries(root), ['file-to-keep'])
@@ -239,7 +235,7 @@ t('removeEntry() to remove an empty directory', async (root) => {
 })
 
 t('removeEntry() on a non-empty directory should fail', async (root) => {
-  handle = await root.getDirectory('dir-to-remove', { create: true })
+  handle = await root.getDirectoryHandle('dir-to-remove', { create: true })
   await createEmptyFile('file-in-dir', handle)
   err = await root.removeEntry('dir-to-remove').catch(e=>e)
   assert(err.name === 'InvalidModificationError')
@@ -546,9 +542,9 @@ t('write() with a string with unix line ending preserved', async (root) => {
   await wfs.close()
   assert(await getFileContents(handle) === 'foo\n')
   assert(await getFileSize(handle) === 4)
-},
-async () => {
-  'write() with a string with windows line ending preserved'
+}),
+
+t('write() with a string with windows line ending preserved', async (root) => {
   handle = await createEmptyFile('string_with_windows_line_ending', root)
   wfs = await handle.createWritable()
   await wfs.write('foo\r\n')
@@ -862,66 +858,69 @@ function img (format) {
     })
 }
 
-const wrapper = manualTest.querySelector('tbody tr')
-$test.onclick = async () => {
-  const opts = {
-    type: $type.value,
-    multiple: $multiple.querySelector('input').checked,
-    accepts: eval($accept.querySelector('textarea').value),
-    excludeAcceptAllOption: $exclude.querySelector('input').checked,
-    _name: $name.querySelector('input').value,
-    _preferPolyfill: $preferPolyfill.querySelector('input').checked
+$types1.value = JSON.stringify([
+  {
+    description: 'Text Files',
+    accept: {
+      'text/plain': ['txt', 'text'],
+      'text/html': ['html', 'htm']
+    }
+  },
+  {
+    description: 'Images',
+    accept: {
+      'image/*': ['png', 'gif', 'jpeg', 'jpg']
+    }
   }
-  const handle = await chooseFileSystemEntries(opts)
-  assert(Array.isArray(handle) === !!opts.multiple)
-  if (opts.multiple) handle = handle[0]
-  assert(handle.isFile === ['open-file', 'save-file'].includes(opts.type))
-  assert(handle.isDirectory === (opts.type === 'open-directory'))
-  if (opts.type === 'save-file') {
-    const format = handle.name.split('.').pop()
-    const image = await img(format)
-    const ws = await handle.createWritable()
-    ws.write(image)
-    ws.close()
-  }
+], null, 2)
 
-  console.log('assert succeeded')
+$types2.value = JSON.stringify([
+  {
+    accept: { 'image/jpg': ['jpg'] }
+  },
+  {
+    accept: { 'image/png': ['png'] }
+  },
+  {
+    accept: { 'image/webp': ['webp'] }
+  },
+], null, 2)
+
+form_showDirectoryPicker.onsubmit = evt => {
+  evt.preventDefault()
+  const opts = Object.fromEntries([...new FormData(evt.target)])
+  opts._preferPolyfill = !!opts._preferPolyfill
+  showDirectoryPicker(opts).then(console.log, console.error)
 }
-$type.onchange = () => {
-  switch ($type.value) {
-    case 'save-file':
-      $accept.hidden =
-      $exclude.hidden =
-      $name.hidden = false
-      $multiple.hidden = true
-      return
-    case 'open-directory':
-      $exclude.hidden =
-      $multiple.hidden =
-      $accept.hidden =
-      $name.hidden = true
-      return
-    case 'open-file':
-      $exclude.hidden =
-      $multiple.hidden =
-      $accept.hidden = false
-      $name.hidden = true
-  }
+form_showOpenFilePicker.onsubmit = evt => {
+  evt.preventDefault()
+  const opts = Object.fromEntries([...new FormData(evt.target)])
+  JSON.parse(new FormData(evt.target).get('foo'))
+  opts.types = JSON.parse(opts.types || '""')
+  opts._preferPolyfill = !!opts._preferPolyfill
+  showOpenFilePicker(opts).then(console.log, console.error)
+}
+form_showSaveFilePicker.onsubmit = async evt => {
+  evt.preventDefault()
+  const opts = Object.fromEntries([...new FormData(evt.target)])
+  opts.types = JSON.parse(opts.types || '""')
+  opts._preferPolyfill = !!opts._preferPolyfill
+  const handle = await showSaveFilePicker(opts)
+  const format = handle.name.split('.').pop()
+  const image = await img(format)
+  const ws = await handle.createWritable()
+  ws.write(image)
+  ws.close()
 }
 
-$accept.querySelector('textarea').value = `[
-  { extensions: ['jpg'] },
-  { extensions: ['webp'] },
-  { mimeTypes: ['image/png'] }
-]`
 
 async function init () {
   const drivers = await Promise.allSettled([
-    FileSystemDirectoryHandle.getSystemDirectory({ type: 'sandbox', _driver: 'native' }),
-    FileSystemDirectoryHandle.getSystemDirectory({ type: 'sandbox', _driver: 'sandbox', _persistent: false }),
-    FileSystemDirectoryHandle.getSystemDirectory({ type: 'sandbox', _driver: 'memory' }),
-    FileSystemDirectoryHandle.getSystemDirectory({ type: 'sandbox', _driver: 'indexeddb' }),
-    FileSystemDirectoryHandle.getSystemDirectory({ type: 'sandbox', _driver: 'cache' })
+    getOriginPrivateDirectory(),
+    getOriginPrivateDirectory(import('../src/adapters/sandbox.js')),
+    getOriginPrivateDirectory(import('../src/adapters/memory.js')),
+    getOriginPrivateDirectory(import('../src/adapters/indexeddb.js')),
+    getOriginPrivateDirectory(import('../src/adapters/cache.js'))
   ])
   let j = 0
   for (let driver of drivers) {
@@ -952,7 +951,7 @@ function arrayEqual(a1, a2) {
 
 async function cleanupSandboxedFileSystem (root) {
   for await (let entry of root.getEntries()) {
-    await root.removeEntry(entry.name, { recursive: entry.isDirectory })
+    await root.removeEntry(entry.name, { recursive: entry.kind === 'directory' })
   }
 }
 
@@ -977,7 +976,7 @@ async function getDirectoryEntryCount (handle) {
 async function getSortedDirectoryEntries(handle) {
   let result = [];
   for await (let entry of handle.getEntries()) {
-    if (entry.isDirectory)
+    if (entry.kind === 'directory')
       result.push(entry.name + '/')
     else
       result.push(entry.name)
@@ -987,11 +986,11 @@ async function getSortedDirectoryEntries(handle) {
 }
 
 async function createDirectory(name, parent) {
-  return parent.getDirectory(name, {create: true})
+  return parent.getDirectoryHandle(name, {create: true})
 }
 
 async function createEmptyFile(name, parent) {
-  const handle = await parent.getFile(name, { create: true })
+  const handle = await parent.getFileHandle(name, { create: true })
   // Make sure the file is empty.
   assert(await getFileSize(handle) === 0)
   return handle
@@ -1016,7 +1015,7 @@ function streamFromFetch(data) {
   })
 }
 
-init()
+init().catch(console.error)
 
 globalThis.ondragover = evt => evt.preventDefault()
 globalThis.ondrop = async evt => {

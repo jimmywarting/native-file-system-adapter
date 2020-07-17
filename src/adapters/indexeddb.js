@@ -1,6 +1,6 @@
 import { errors } from '../util.js'
 
-const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX, SECURITY, DISALLOWED } = errors
+const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX } = errors
 
 class Sink {
   constructor (db, id, size, file) {
@@ -10,7 +10,7 @@ class Sink {
     this.position = 0
     this.file = file
   }
-  write (chunk,c) {
+  write (chunk) {
     if (typeof chunk === 'object') {
       if (chunk.type === 'write') {
         if (Number.isInteger(chunk.position) && chunk.position >= 0) {
@@ -92,7 +92,7 @@ class FileHandle {
     this.db = db
     this.id = id
     this.name = name
-    this.isFile = true
+    this.kind = 'file'
     this.readable = true
     this.writable = true
   }
@@ -134,10 +134,10 @@ function rimraf(evt, toDelete, recursive = true) {
 
 class FolderHandle {
   constructor(db, id, name) {
-    this.id = id
     this.db = db
+    this.id = id
+    this.kind = 'directory'
     this.name = name
-    this.isFile = false
     this.readable = true
     this.writable = true
   }
@@ -151,7 +151,7 @@ class FolderHandle {
         : new FolderHandle(this.db, id, name)
     }
   }
-  getDirectory (name, opts = {}) {
+  getDirectoryHandle (name, opts = {}) {
     return new Promise((rs, rj) => {
       const [ tx, table ] = store(this.db)
       table.get(this.id).onsuccess = evt => {
@@ -172,7 +172,7 @@ class FolderHandle {
       }
     })
   }
-  getFile (name, opts = {}) {
+  getFileHandle (name, opts = {}) {
     return new Promise((rs, rj) => {
       const [tx, table] = store(this.db)
       const query = table.get(this.id)
@@ -198,7 +198,7 @@ class FolderHandle {
   }
   async removeEntry (name, opts) {
     return new Promise((rs, rj) => {
-      const [tx, table] = store(this.db, 1)
+      const [tx, table] = store(this.db)
       const cwdQ = table.get(this.id)
       cwdQ.onsuccess = (evt) => {
         const cwd = cwdQ.result
@@ -212,7 +212,7 @@ class FolderHandle {
       }
       tx.oncomplete = rs
       tx.onerror = rj
-      tx.onabort = (e) => {
+      tx.onabort = () => {
         rj(new DOMException(...MOD_ERR))
       }
     })
@@ -224,7 +224,7 @@ export default (opts = { persistent: false }) => new Promise((rs,rj) => {
 
   request.onupgradeneeded = evt => {
     const db = evt.target.result
-    const os = db.createObjectStore('entries', { autoIncrement: true }).transaction.oncomplete = evt => {
+    db.createObjectStore('entries', { autoIncrement: true }).transaction.oncomplete = evt => {
       db.transaction('entries', 'readwrite').objectStore('entries').add({})
     }
   }

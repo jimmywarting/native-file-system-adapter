@@ -5,13 +5,14 @@ const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX, SECURITY, DISALLOWED } = error
 export class FileHandle {
   constructor (name, file) {
     this.name = name
-    this.isFile = true
+    this.kind = 'file'
   }
   getFile () {
     throw new DOMException(...GONE)
   }
   async createWritable (opts) {
     const sw = await navigator.serviceWorker.getRegistration()
+    // @ts-ignore
     const useBlobFallback = !sw || /constructor/i.test(window.HTMLElement) || !!window.safari
     let sink
 
@@ -56,6 +57,7 @@ export class FileHandle {
           }
         })
         sink = ts.writable.getWriter()
+        // @ts-ignore
         sw.active.postMessage({
           rs: ts.readable,
           url: sw.scope + name,
@@ -75,7 +77,7 @@ export class FileHandle {
         sink = {
           async write (chunk) {
             const reader = new Response(chunk).body.getReader()
-            const pump = () => reader.read()
+            const pump = _ => reader.read()
               .then(res => res.done ? '' : pump(mc.port1.postMessage(res.value)))
             return pump()
           },

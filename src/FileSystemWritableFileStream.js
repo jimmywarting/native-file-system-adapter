@@ -1,15 +1,19 @@
 /* global globalThis */
 
-import { WritableStream } from 'https://cdn.jsdelivr.net/npm/web-streams-polyfill@2.1.0/dist/ponyfill.es2018.mjs'
+import {WritableStream as _WritableStream} from 'https://cdn.jsdelivr.net/npm/web-streams-polyfill@2.1.0/dist/ponyfill.es2018.mjs'
 
-const Writable = globalThis.WritableStream || WritableStream
 
 /**
- * @lends WritableStream
+ * @alias {WritableStream}
  */
-class FileSystemWritableFileStream extends Writable {
+var F = _WritableStream
+
+
+class FileSystemWritableFileStream extends (globalThis.WritableStream || _WritableStream) {
   constructor (sink) {
     super(sink)
+
+    /** @private */
     this._closed = false
   }
   close () {
@@ -20,9 +24,17 @@ class FileSystemWritableFileStream extends Writable {
     return p
     // return super.close ? super.close() : this.getWriter().close()
   }
+
+  /**
+   * @param {number} position
+   */
   seek (position) {
     return this.write({ type: 'seek', position })
   }
+
+  /**
+   * @param {number} size
+   */
   truncate (size) {
     return this.write({ type: 'truncate', size })
   }
