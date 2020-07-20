@@ -39,7 +39,8 @@ export class FileHandle {
       const fileName = encodeURIComponent(this.name).replace(/['()]/g, escape).replace(/\*/g, '%2A')
       const headers = {
         'Content-Disposition': "attachment; filename*=UTF-8''" + fileName,
-        'Content-Type': 'application/octet-stream; charset=utf-8'
+        'Content-Type': 'application/octet-stream; charset=utf-8',
+        ...(opts.size ? { 'Content-Length': opts.size } : {})
       }
 
       try {
@@ -60,7 +61,7 @@ export class FileHandle {
         // @ts-ignore
         sw.active.postMessage({
           rs: ts.readable,
-          url: sw.scope + name,
+          url: sw.scope + fileName,
           headers
         }, [ ts.readable ])
       } catch (err) {
@@ -87,14 +88,14 @@ export class FileHandle {
           }
         }
         sw.active.postMessage({
-          url: sw.scope + name,
+          url: sw.scope + fileName,
           headers
         }, [ mc.port2 ])
       }
 
       const iframe = document.createElement('iframe')
       iframe.hidden = true
-      iframe.src = sw.scope + name
+      iframe.src = sw.scope + fileName
       document.body.appendChild(iframe)
     }
 
