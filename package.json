@@ -2,12 +2,12 @@
   "name": "native-file-system-adapter",
   "version": "0.1.0",
   "description": "Native File System API",
-  "main": "src/es6.js",
+  "main": "dist/es6.js",
   "directories": {
     "example": "example"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 0"
+    "build": "rm -rf dist && rollup -c rollup.config.js"
   },
   "repository": {
     "type": "git",
@@ -17,9 +17,18 @@
     "registry":"https://npm.pkg.github.com/@jimmywarting"
   },
   "author": "Jimmy Wärting",
+  "types": "types/es6.d.ts",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/jimmywarting/native-file-system-adapter/issues"
   },
-  "homepage": "https://github.com/jimmywarting/native-file-system-adapter#readme"
+  "homepage": "https://github.com/jimmywarting/native-file-system-adapter#readme",
+  "devDependencies": {
+    "rollup": "^2.22.1",
+    "rollup-plugin-terser": "^6.1.0",
+    "rollup-plugin-url-import": "^0.4.0"
+  },
+  "dependencies": {
+    "web-streams-polyfill": "^2.1.1"
+  }
 }
