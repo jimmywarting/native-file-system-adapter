@@ -9,7 +9,7 @@
     "removeComments": true,
     "emitDeclarationOnly": true,
     "lib": ["es2019", "dom"],
-    "outDir": "./types/",
+    "outDir": "./types/"
   },
-  "include": ["src/*.js"],
+  "include": ["src/*.js"]
 }
