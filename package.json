@@ -7,6 +7,7 @@
     "example": "example"
   },
   "scripts": {
+    "test": "exit 0",
     "build": "rm -rf dist && rollup -c rollup.config.js"
   },
   "repository": {
