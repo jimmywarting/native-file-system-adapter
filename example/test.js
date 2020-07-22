@@ -1,14 +1,14 @@
 // @ts-check
 import { WritableStream, ReadableStream as Readable } from 'https://cdn.jsdelivr.net/npm/web-streams-polyfill@2.1.0/dist/ponyfill.es2018.mjs'
-import {
+import * as fs from '../src/es6.js'
+const {
   showDirectoryPicker,
   showOpenFilePicker,
   showSaveFilePicker,
-  getOriginPrivateDirectory,
-  FileSystemDirectoryHandle
-} from '../src/es6.js'
-import { fromDataTransfer } from '../src/util.js'
+  getOriginPrivateDirectory
+} = fs
 
+globalThis.fs = fs
 const Writable = globalThis.WritableStream || WritableStream
 const ReadableStream = globalThis.WritableStream
   ? globalThis.ReadableStream
@@ -1027,10 +1027,7 @@ globalThis.ondrop = async evt => {
   // return result.sort()
 
   try {
-    const root = await FileSystemDirectoryHandle.getSystemDirectory({
-      type: 'sandbox',
-      _driver: evt.dataTransfer
-    })
+    const root = await getOriginPrivateDirectory(evt.dataTransfer)
     assert(await getDirectoryEntryCount(root) > 0)
     assert(await root.requestPermission({ writable: true }) === 'denied')
     const dirs = [root]
@@ -1040,16 +1037,13 @@ globalThis.ondrop = async evt => {
         // Everything should be read only
         assert(await entry.requestPermission({ writable: true }) === 'denied')
         assert(await entry.requestPermission({ readable: true }) === 'granted')
-        if (entry.isFile) {
+        if (entry.kind === 'file') {
           result.push(cwd + entry.name)
-          assert(entry.isFile === true)
-          assert(entry.isDirectory === false)
           err = await entry.createWritable().catch(e=>e)
           assert(err.name === 'NotAllowedError')
         } else {
           result.push(cwd + entry.name + '/')
-          assert(entry.isFile === false)
-          assert(entry.isDirectory === true)
+          assert(entry.kind === 'directory')
           dirs.push(entry)
         }
       }

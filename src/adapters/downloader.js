@@ -1,104 +1,172 @@
 import { errors } from '../util.js'
 
-const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX, SECURITY, DISALLOWED } = errors
+const { GONE } = errors
+// @ts-ignore
+const isSafari = /constructor/i.test(window.HTMLElement) || window.safari || window.WebKitPoint
+let TransformStream = globalThis.TransformStream
+let WritableStream = globalThis.WritableStream
 
 export class FileHandle {
-  constructor (name, file) {
+  constructor (name = 'unkown') {
     this.name = name
     this.kind = 'file'
   }
   getFile () {
     throw new DOMException(...GONE)
   }
-  async createWritable (opts) {
-    const sw = await navigator.serviceWorker.getRegistration()
-    // @ts-ignore
-    const useBlobFallback = !sw || /constructor/i.test(window.HTMLElement) || !!window.safari
-    let sink
 
-    if (useBlobFallback) {
-      const link = document.createElement('a')
-      link.download = this.name
+  /**
+   * @param {object} [options={}]
+   */
+  async createWritable (options = {}) {
+    if (!TransformStream) {
+      // @ts-ignore
+      const ponyfill = await import('https://cdn.jsdelivr.net/npm/web-streams-polyfill@2.1.1/dist/ponyfill.es2018.mjs')
+      TransformStream = ponyfill.TransformStream
+      WritableStream = ponyfill.WritableStream
+    }
+    const sw = await navigator.serviceWorker.getRegistration()
+    const link = document.createElement('a')
+    const ts = new TransformStream()
+    let sink = ts.writable
+
+    link.download = this.name
+
+    if (isSafari || !sw) {
       let chunks = []
-      sink = {
-        write (chunk) {
+      ts.readable.pipeTo(new WritableStream({
+        write(chunk) {
           chunks.push(new Blob([chunk]))
         },
-        close (something) {
+        close () {
           const blob = new Blob(chunks, { type: 'application/octet-stream; charset=utf-8' })
           chunks = []
           link.href = URL.createObjectURL(blob)
           link.click()
-          setTimeout(() => {
-            URL.revokeObjectURL(link.href)
-          }, 10000)
+          setTimeout(() => URL.revokeObjectURL(link.href), 10000)
         }
-      }
+      }))
     } else {
+      const { writable, readablePort } = new RemoteWritableStream(WritableStream)
       // Make filename RFC5987 compatible
       const fileName = encodeURIComponent(this.name).replace(/['()]/g, escape).replace(/\*/g, '%2A')
       const headers = {
-        'Content-Disposition': "attachment; filename*=UTF-8''" + fileName,
-        'Content-Type': 'application/octet-stream; charset=utf-8',
-        ...(opts.size ? { 'Content-Length': opts.size } : {})
+        'content-disposition': "attachment; filename*=UTF-8''" + fileName,
+        'content-type': 'application/octet-stream; charset=utf-8'
+        // 'content-length': unknown
       }
 
-      try {
-        /****************************************/
-        /* Canary mostly (transferable streams) */
-        /****************************************/
-        console.log('canary')
-        const ts = new TransformStream({
-          async transform (chunk, ctrl) {
-            return new Response(chunk).body.pipeTo(new WritableStream({
-              write (chunk) {
-                return ctrl.enqueue(chunk)
-              }
-            }))
-          }
-        })
-        sink = ts.writable.getWriter()
-        // @ts-ignore
-        sw.active.postMessage({
-          rs: ts.readable,
-          url: sw.scope + fileName,
-          headers
-        }, [ ts.readable ])
-      } catch (err) {
-        console.log(err)
-        /****************************************/
-        /* MessageChannel fallback              */
-        /****************************************/
-        console.log('chrome, firefox, opera')
-        const mc = new MessageChannel()
-        const interval = setInterval(() => {
-          sw.active.postMessage('ping')
-        }, 5000)
+      const keepAlive = setTimeout(() => sw.active.postMessage(0), 10000)
 
-        sink = {
-          async write (chunk) {
-            const reader = new Response(chunk).body.getReader()
-            const pump = _ => reader.read()
-              .then(res => res.done ? '' : pump(mc.port1.postMessage(res.value)))
-            return pump()
-          },
-          close () {
-            clearInterval(interval)
-            mc.port1.postMessage('end')
-          }
+      ts.readable.pipeThrough(new TransformStream({
+        transform(chunk, ctrl) {
+          if (chunk instanceof Uint8Array) return ctrl.enqueue(chunk)
+          const reader = new Response(chunk).body.getReader()
+          const pump = _ => reader.read().then(e => e.done ? 0 : pump(ctrl.enqueue(e.value)))
+          return pump()
         }
-        sw.active.postMessage({
-          url: sw.scope + fileName,
-          headers
-        }, [ mc.port2 ])
-      }
+      })).pipeTo(writable).finally(() => {
+        clearInterval(keepAlive)
+      })
 
+      // Transfer the stream to service worker
+      sw.active.postMessage({
+        url: sw.scope + this.name,
+        headers,
+        readablePort
+      }, [ readablePort ])
+
+      // Trigger the download with a hidden iframe
       const iframe = document.createElement('iframe')
       iframe.hidden = true
-      iframe.src = sw.scope + fileName
+      iframe.src = sw.scope + this.name
       document.body.appendChild(iframe)
     }
 
-    return sink
+    return sink.getWriter()
+  }
+}
+
+const WRITE = 0
+const PULL = 0
+const ERROR = 1
+const ABORT = 1
+const CLOSE = 2
+
+class MessagePortSink {
+  constructor (port) {
+    this._port = port
+    this._resetReady()
+    this._port.onmessage = event => this._onMessage(event.data)
+  }
+
+  start (controller) {
+    this._controller = controller
+    // Apply initial backpressure
+    return this._readyPromise
+  }
+
+  write (chunk) {
+    const message = { type: WRITE, chunk }
+
+    // Send chunk
+    this._port.postMessage(message, [chunk.buffer])
+
+    // Assume backpressure after every write, until sender pulls
+    this._resetReady()
+
+    // Apply backpressure
+    return this._readyPromise
+  }
+
+  close () {
+    this._port.postMessage({ type: CLOSE })
+    this._port.close()
+  }
+
+  abort (reason) {
+    this._port.postMessage({ type: ABORT, reason })
+    this._port.close()
+  }
+
+  _onMessage (message) {
+    if (message.type === PULL) this._resolveReady()
+    if (message.type === ERROR) this._onError(message.reason)
+  }
+
+  _onError (reason) {
+    this._controller.error(reason)
+    this._rejectReady(reason)
+    this._port.close()
+  }
+
+  _resetReady () {
+    this._readyPromise = new Promise((resolve, reject) => {
+      this._readyResolve = resolve
+      this._readyReject = reject
+    })
+    this._readyPending = true
+  }
+
+  _resolveReady () {
+    this._readyResolve()
+    this._readyPending = false
+  }
+
+  _rejectReady (reason) {
+    if (!this._readyPending) this._resetReady()
+    this._readyPromise.catch(() => {})
+    this._readyReject(reason)
+    this._readyPending = false
+  }
+}
+
+class RemoteWritableStream {
+  constructor (WritableStream) {
+    const channel = new MessageChannel()
+    this.readablePort = channel.port1
+    this.writable = new WritableStream(
+      new MessagePortSink(channel.port2)
+    )
   }
 }
