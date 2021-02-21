@@ -22,9 +22,17 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
     return new FileSystemDirectoryHandle(await wm.get(this).getDirectoryHandle(name, options))
   }
 
-  async * getEntries () {
-    for await (let entry of wm.get(this).getEntries())
+  async * entries () {
+    for await (let entry of wm.get(this).entries())
       yield entry.kind === 'file' ? new FileSystemFileHandle(entry) : new FileSystemDirectoryHandle(entry)
+  }
+
+  /**
+   * @deprecated use .entries() instead
+   */
+  getEntries() {
+    console.warn('deprecated, use .entries() instead')
+    return this.entries()
   }
 
   /**
@@ -62,7 +70,7 @@ Object.defineProperty(FileSystemDirectoryHandle.prototype, Symbol.toStringTag, {
 
 Object.defineProperties(FileSystemDirectoryHandle.prototype, {
 	getDirectoryHandle: { enumerable: true },
-	getEntries: { enumerable: true },
+	entries: { enumerable: true },
 	getFileHandle: { enumerable: true },
 	removeEntry: { enumerable: true }
 })

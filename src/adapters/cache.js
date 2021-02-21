@@ -121,7 +121,7 @@ export class FolderHandle {
     this.kind = 'directory'
     this.name = dir.split('/').pop()
   }
-  async * getEntries () {
+  async * entries () {
     for (let [path, isFile] of Object.entries(await this._tree)) {
       yield isFile ? new FileHandle(path, this.cache) : new FolderHandle(path, this.cache)
     }

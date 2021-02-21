@@ -2,6 +2,9 @@
 
 // @ts-ignore
 import {WritableStream as _WritableStream} from 'https://cdn.jsdelivr.net/npm/web-streams-polyfill@2.1.0/dist/ponyfill.es2018.mjs'
+// import {WritableStream as _WritableStream} from 'web-streams-polyfill'
+// import ponyfill from 'web-streams-polyfill'
+// const _WritableStream = ponyfill.WritableStream
 
 class FileSystemWritableFileStream extends (globalThis.WritableStream || _WritableStream) {
   constructor (sink) {

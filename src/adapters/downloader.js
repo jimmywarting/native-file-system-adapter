@@ -52,8 +52,8 @@ export class FileHandle {
       const fileName = encodeURIComponent(this.name).replace(/['()]/g, escape).replace(/\*/g, '%2A')
       const headers = {
         'content-disposition': "attachment; filename*=UTF-8''" + fileName,
-        'content-type': 'application/octet-stream; charset=utf-8'
-        // 'content-length': unknown
+        'content-type': 'application/octet-stream; charset=utf-8',
+        ...(options.size ? { 'content-length': options.size } : {})
       }
 
       const keepAlive = setTimeout(() => sw.active.postMessage(0), 10000)
@@ -71,7 +71,7 @@ export class FileHandle {
 
       // Transfer the stream to service worker
       sw.active.postMessage({
-        url: sw.scope + this.name,
+        url: sw.scope + fileName,
         headers,
         readablePort
       }, [ readablePort ])
@@ -79,7 +79,7 @@ export class FileHandle {
       // Trigger the download with a hidden iframe
       const iframe = document.createElement('iframe')
       iframe.hidden = true
-      iframe.src = sw.scope + this.name
+      iframe.src = sw.scope + fileName
       document.body.appendChild(iframe)
     }
 

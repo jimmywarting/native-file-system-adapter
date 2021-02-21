@@ -91,7 +91,7 @@ export class FolderHandle {
     this.kind = 'directory'
     this.name = dir.name
   }
-  async * getEntries () {
+  async * entries () {
     const entries = await new Promise((rs, rj) => this.dir.createReader().readEntries(rs, rj))
     for (let x of entries) {
       yield x.isFile ? new FileHandle(x, this.writable) : new FolderHandle(x, this.writable)

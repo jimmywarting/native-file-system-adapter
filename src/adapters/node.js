@@ -1,24 +1,49 @@
+import { truncateSync, createWriteStream, createReadStream, promises as fs } from 'fs'
 import { errors } from '../util.js'
+import { join } from 'path'
+import Blob from 'fetch-blob'
+import blobFrom from 'fetch-blob/from.js'
+import DOMException from 'domexception'
+
+// import mime from 'mime-types'
 
 const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX, SECURITY, DISALLOWED } = errors
 
+class File extends Blob {
+	constructor(blobParts, fileName, options = {}) {
+		const { lastModified = Date.now(), ...blobPropertyBag } = options
+		super(blobParts, blobPropertyBag)
+		this.name = String(fileName).replace(/\//g, '\u003A')
+		this.lastModified = +lastModified
+		this.lastModifiedDate = new Date(lastModified)
+	}
+
+  get [Symbol.toStringTag]() {
+		return 'File'
+	}
+}
+
 export class Sink {
-  constructor (fileHandle) {
-    this.fileHandle = fileHandle
-    this.file = fileHandle.file
-    this.size = fileHandle.file.size
+  constructor (filehandle, size) {
+    this.filehandle = filehandle
+    this.size = size
     this.position = 0
   }
-  write (chunk) {
+  abort() {
+    this.filehandle.close()
+  }
+  async write (chunk) {
     if (typeof chunk === 'object') {
       if (chunk.type === 'write') {
         if (Number.isInteger(chunk.position) && chunk.position >= 0) {
           if (this.size < chunk.position) {
+            this.filehandle.close()
             throw new DOMException(...INVALID)
           }
           this.position = chunk.position
         }
         if (!('data' in chunk)) {
+          await this.filehandle.close()
           throw new DOMException(...SYNTAX('write requires a data argument'))
         }
         chunk = chunk.data
@@ -30,155 +55,149 @@ export class Sink {
           this.position = chunk.position
           return
         } else {
+          await this.filehandle.close()
           throw new DOMException(...SYNTAX('seek requires a position argument'))
         }
       } else if (chunk.type === 'truncate') {
         if (Number.isInteger(chunk.size) && chunk.size >= 0) {
-          let file = this.file
-          file = chunk.size < this.size
-            ? file.slice(0, chunk.size)
-            : new File([file, new Uint8Array(chunk.size - this.size)], file.name)
-
-          this.size = file.size
-          if (this.position > file.size) {
-            this.position = file.size
+          await this.filehandle.truncate(chunk.size)
+          this.size = chunk.size
+          if (this.position > this.size) {
+            this.position = this.size
           }
-          this.file = file
           return
         } else {
+          await this.filehandle.close()
           throw new DOMException(...SYNTAX('truncate requires a size argument'))
         }
       }
     }
 
-    chunk = new Blob([chunk])
-
-    let blob = this.file
-    // Calc the head and tail fragments
-    const head = blob.slice(0, this.position)
-    const tail = blob.slice(this.position + chunk.size)
-
-    // Calc the padding
-    let padding = this.position - head.size
-    if (padding < 0) {
-      padding = 0
+    if (chunk instanceof ArrayBuffer) {
+      chunk = new Uint8Array(chunk)
     }
-    blob = new File([
-      head,
-      new Uint8Array(padding),
-      chunk,
-      tail
-    ], blob.name)
 
-    this.size = blob.size
-    this.position += chunk.size
+    // Probably should make this the default if
+    // chunk isn't converted to a buffer
+    if (typeof chunk === 'string') {
+      chunk = Buffer.from(chunk)
+    }
 
-    this.file = blob
+    if (chunk instanceof Blob) {
+      for await (const data of chunk.stream()) {
+        const res = await this.filehandle.writev([data], this.position)
+        this.position += res.bytesWritten
+        this.size += res.bytesWritten
+      }
+      return
+    }
 
-    // Maybe shouldn't do this:
-    // this.fileHandle.file = this.file
+    const res = await this.filehandle.writev([chunk], this.position)
+    this.position += res.bytesWritten
+    this.size += res.bytesWritten
   }
-  close () {
-    if (this.fileHandle.deleted) throw new DOMException(...GONE)
-    this.fileHandle.file = this.file
-    this.file =
-    this.position =
-    this.size = null
-    if (this.fileHandle.onclose) {
-      this.fileHandle.onclose(this.fileHandle)
-    }
+  async close () {
+    await this.filehandle.close()
   }
 }
 
 export class FileHandle {
-  constructor (name, file, writable = true) {
-    this.file = file || new File([], name)
+  #path
+
+  constructor (path, name) {
+    this.#path = path
     this.name = name
     this.kind = 'file'
-    this.deleted = false
-    this.writable = writable
-    this.readable = true
   }
 
-  getFile () {
-    if (this.deleted) throw new DOMException(...GONE)
-    return this.file
+  async getFile () {
+    const { mtime } = await fs.stat(this.#path).catch(err => {
+      if (err.code === 'ENOENT') throw new DOMException(...GONE)
+    })
+    const blob = blobFrom(this.#path)
+    return new File([blob], this.name, {
+      lastModified: mtime,
+      type: ''
+    })
   }
 
-  createWritable (opts) {
-    if (!this.writable) throw new DOMException(...DISALLOWED)
-    if (this.deleted) throw new DOMException(...GONE)
-    return new Sink(this)
-  }
-
-  destroy () {
-    this.deleted = true
-    this.file = null
+  async createWritable () {
+    const filehandle = await fs.open(this.#path, 'r+').catch(err => {
+      if (err.code === 'ENOENT') throw new DOMException(...GONE)
+      throw err
+    })
+    const { size } = await filehandle.stat()
+    return new Sink(filehandle, size)
   }
 }
 
 export class FolderHandle {
+  #path = ''
 
-  constructor (name, writable = true) {
+  constructor (path, name = '') {
     this.name = name
     this.kind = 'directory'
-    this.deleted = false
-    this.entries = {}
-    this.writable = writable
-    this.readable = true
+    this.#path = path
   }
 
-  async * getEntries () {
-    if (this.deleted) throw new DOMException(...GONE)
-    yield* Object.values(this.entries)
-  }
-
-  getDirectoryHandle (name, opts = {}) {
-    if (this.deleted) throw new DOMException(...GONE)
-    const entry = this.entries[name]
-    if (entry) { // entry exist
-      if (entry instanceof FileHandle) {
-        throw new DOMException(...MISMATCH)
-      } else {
-        return entry
-      }
-    } else {
-      if (opts.create) {
-        return (this.entries[name] = new FolderHandle(name))
-      } else {
-        throw new DOMException(...GONE)
+  async * entries () {
+    const dir = this.#path
+    const items = await fs.readdir(dir)
+    for (let name of items) {
+      const path = join(dir, name)
+      const stat = await fs.lstat(path)
+      if (stat.isFile()) {
+        yield new FileHandle(path, name)
+      } else if (stat.isDirectory()) {
+        yield new FolderHandle(path, name)
       }
     }
   }
 
-  getFileHandle (name, opts = {}) {
-    const entry = this.entries[name]
-    const isFile = entry instanceof FileHandle
-    if (entry && isFile) return entry
-    if (entry && !isFile) throw new DOMException(...MISMATCH)
-    if (!entry && !opts.create) throw new DOMException(...GONE)
-    if (!entry && opts.create) {
-      return (this.entries[name] = new FileHandle(name))
-    }
+  async getDirectoryHandle (name, opts = {}) {
+    const path = join(this.#path, name)
+    const stat = await fs.lstat(path).catch(err => {
+      if (err.code !== 'ENOENT') throw err
+    })
+    const isDirectory = stat?.isDirectory()
+    if (stat && isDirectory) return new FolderHandle(path, name)
+    if (stat && !isDirectory) throw new DOMException(...MISMATCH)
+    if (!opts.create) throw new DOMException(...GONE)
+    await fs.mkdir(path)
+    return new FolderHandle(path, name)
   }
 
-  removeEntry (name, opts) {
-    const entry = this.entries[name]
-    if (!entry) throw new DOMException(...GONE)
-    entry.destroy(opts.recursive)
-    delete this.entries[name]
+  async getFileHandle (name, opts = {}) {
+    const path = join(this.#path, name)
+    const stat = await fs.lstat(path).catch(err => {
+      if (err.code !== 'ENOENT') throw err
+    })
+    const isFile = stat?.isFile()
+    if (stat && isFile) return new FileHandle(path, name)
+    if (stat && !isFile) throw new DOMException(...MISMATCH)
+    if (!opts.create) throw new DOMException(...GONE)
+    await (await fs.open(path, 'w')).close()
+    return new FileHandle(path, name)
   }
 
-  destroy (recursive) {
-    for (let x of Object.values(this.entries)) {
-      if (!recursive) throw new DOMException(...MOD_ERR)
-      x.destroy(recursive)
-    }
-    this.entries = {}
-    this.deleted = true
+  async queryPermission () {
+    return 'granted'
+  }
+
+  async removeEntry (name, opts) {
+    const path = join(this.#path, name)
+    const stat = await fs.lstat(path).catch(err => {
+      if (err.code === 'ENOENT') throw new DOMException(...GONE)
+      throw err
+    })
+    return stat.isDirectory() ? fs.rmdir(path, {
+      recursive: !!opts.recursive
+    }).catch(err => {
+      if (err.code === 'ENOTEMPTY') throw new DOMException(...MOD_ERR)
+      console.log(123132)
+      throw err
+    }) : fs.unlink(path)
   }
 }
 
-const fs = new FolderHandle('')
-
-export default opts => fs
+export default path => new FolderHandle(path)

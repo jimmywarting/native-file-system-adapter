@@ -1,11 +1,13 @@
 import FileSystemDirectoryHandle from './FileSystemDirectoryHandle.js'
+
 /**
  * @param {object=} driver
  * @return {Promise<FileSystemDirectoryHandle>}
  */
 async function getOriginPrivateDirectory (driver, options = {}) {
-  if (driver instanceof DataTransfer) {
+  if (typeof DataTransfer === 'function' && driver instanceof DataTransfer) {
     const entries = [driver.items].map(item =>
+      // @ts-ignore
       item.webkitGetAsEntry()
     )
     return import('./util.js').then(m => m.fromDataTransfer(entries))

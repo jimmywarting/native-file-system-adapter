@@ -123,19 +123,19 @@ export class FolderHandle {
     this.name = name
     this.kind = 'directory'
     this.deleted = false
-    this.entries = {}
+    this._entries = {}
     this.writable = writable
     this.readable = true
   }
 
-  async * getEntries () {
+  async * entries () {
     if (this.deleted) throw new DOMException(...GONE)
-    yield* Object.values(this.entries)
+    yield* Object.values(this._entries)
   }
 
   getDirectoryHandle (name, opts = {}) {
     if (this.deleted) throw new DOMException(...GONE)
-    const entry = this.entries[name]
+    const entry = this._entries[name]
     if (entry) { // entry exist
       if (entry instanceof FileHandle) {
         throw new DOMException(...MISMATCH)
@@ -144,7 +144,7 @@ export class FolderHandle {
       }
     } else {
       if (opts.create) {
-        return (this.entries[name] = new FolderHandle(name))
+        return (this._entries[name] = new FolderHandle(name))
       } else {
         throw new DOMException(...GONE)
       }
@@ -152,29 +152,29 @@ export class FolderHandle {
   }
 
   getFileHandle (name, opts = {}) {
-    const entry = this.entries[name]
+    const entry = this._entries[name]
     const isFile = entry instanceof FileHandle
     if (entry && isFile) return entry
     if (entry && !isFile) throw new DOMException(...MISMATCH)
     if (!entry && !opts.create) throw new DOMException(...GONE)
     if (!entry && opts.create) {
-      return (this.entries[name] = new FileHandle(name))
+      return (this._entries[name] = new FileHandle(name))
     }
   }
 
   removeEntry (name, opts) {
-    const entry = this.entries[name]
+    const entry = this._entries[name]
     if (!entry) throw new DOMException(...GONE)
     entry.destroy(opts.recursive)
-    delete this.entries[name]
+    delete this._entries[name]
   }
 
   destroy (recursive) {
-    for (let x of Object.values(this.entries)) {
+    for (let x of Object.values(this._entries)) {
       if (!recursive) throw new DOMException(...MOD_ERR)
       x.destroy(recursive)
     }
-    this.entries = {}
+    this._entries = {}
     this.deleted = true
   }
 }

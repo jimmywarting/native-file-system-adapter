@@ -21,18 +21,16 @@ It's not trying to interfear with the changing spec by using other properties th
 ### Using
 
 ```js
-import { showOpenFilePicker, getOriginPrivateDirectory }
-from 'https://cdn.jsdelivr.net/gh/jimmywarting/native-file-system-adapter/src/es6.js'
-
-export {
+import {
   showDirectoryPicker,
   showOpenFilePicker,
   showSaveFilePicker,
   FileSystemDirectoryHandle,
   FileSystemFileHandle,
   FileSystemHandle,
-  FileSystemWritableFileStream
-}
+  FileSystemWritableFileStream,
+  getOriginPrivateDirectory
+} from 'https://cdn.jsdelivr.net/gh/jimmywarting/native-file-system-adapter/src/es6.js'
 
 
 // pick a file
@@ -53,8 +51,9 @@ await fileHandle.write(file)
 // save/download a file
 const fileHandle = await showSaveFilePicker({
   _preferPolyfill: false,
-  _name: 'Untitled.png', // the name being used when preferPolyfill is true or native is unavalible
-  types: {},
+  _name: 'Untitled.png', // (Deprecated) name being used when preferPolyfill is true
+  suggestedName: 'Untitled.png',
+  types: [{}],
   excludeAcceptAllOption: false,
 })
 

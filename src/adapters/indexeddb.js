@@ -141,7 +141,7 @@ class FolderHandle {
     this.readable = true
     this.writable = true
   }
-  async * getEntries () {
+  async * entries () {
     const [tx, table] = store(this.db)
     const entries = await new Promise(rs => table.get(this.id).onsuccess = evt => rs(evt.target.result))
     if (!entries) throw new DOMException(...GONE)
