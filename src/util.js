@@ -16,7 +16,7 @@ export async function fromDataTransfer (entries) {
   ])
 
   const folder = new memory.FolderHandle('', false)
-  folder.entries = entries.map(entry => entry.isFile
+  folder._entries = entries.map(entry => entry.isFile
     ? new sandbox.FileHandle(entry, false)
     : new sandbox.FolderHandle(entry, false)
   )
@@ -43,7 +43,7 @@ export async function fromInput (input) {
         if (!dir._entries[path]) dir._entries[path] = new FolderHandle(path, false)
         return dir._entries[path]
       }, root)
-      dir.entries[name] = new FileHandle(file.name, file, false)
+      dir._entries[name] = new FileHandle(file.name, file, false)
     })
     return new FileSystemDirectoryHandle(root)
   } else {

@@ -890,7 +890,7 @@ form_showDirectoryPicker.onsubmit = evt => {
   evt.preventDefault()
   const opts = Object.fromEntries([...new FormData(evt.target)])
   opts._preferPolyfill = !!opts._preferPolyfill
-  showDirectoryPicker(opts).then(console.log, console.error)
+  showDirectoryPicker(opts).then(showFileStructur, console.error)
 }
 form_showOpenFilePicker.onsubmit = evt => {
   evt.preventDefault()
@@ -950,8 +950,8 @@ function arrayEqual(a1, a2) {
 }
 
 async function cleanupSandboxedFileSystem (root) {
-  for await (let entry of root.entries()) {
-    await root.removeEntry(entry.name, { recursive: entry.kind === 'directory' })
+  for await (let [name, entry] of root) {
+    await root.removeEntry(name, { recursive: entry.kind === 'directory' })
   }
 }
 
@@ -967,19 +967,17 @@ async function getFileContents (handle) {
 
 async function getDirectoryEntryCount (handle) {
     let result = 0
-    for await (let entry of handle.entries()) {
-      result++
-    }
+    for await (let entry of handle) result++
     return result
 }
 
 async function getSortedDirectoryEntries(handle) {
   let result = [];
-  for await (let entry of handle.entries()) {
+  for await (let [name, entry] of handle) {
     if (entry.kind === 'directory')
-      result.push(entry.name + '/')
+      result.push(name + '/')
     else
-      result.push(entry.name)
+      result.push(name)
   }
   result.sort()
   return result
@@ -1020,31 +1018,35 @@ init().catch(console.error)
 globalThis.ondragover = evt => evt.preventDefault()
 globalThis.ondrop = async evt => {
   evt.preventDefault()
+  const root = await getOriginPrivateDirectory(evt.dataTransfer)
+  showFileStructur(root)
+}
 
+async function showFileStructur(root) {
   let result = []
   let cwd = ''
 
   // return result.sort()
+  const readonly = document.querySelector('[form=form_showOpenFilePicker][name="_preferPolyfill"]').checked
 
   try {
-    const root = await getOriginPrivateDirectory(evt.dataTransfer)
-    assert(await getDirectoryEntryCount(root) > 0)
-    assert(await root.requestPermission({ writable: true }) === 'denied')
+    readonly && assert(await getDirectoryEntryCount(root) > 0)
+    readonly && assert(await root.requestPermission({ writable: true }) === 'denied')
     const dirs = [root]
     for (let dir of dirs) {
       cwd += dir.name + '/'
-      for await (let entry of dir.entries()) {
+      for await (let [name, handle] of dir) {
         // Everything should be read only
-        assert(await entry.requestPermission({ writable: true }) === 'denied')
-        assert(await entry.requestPermission({ readable: true }) === 'granted')
-        if (entry.kind === 'file') {
-          result.push(cwd + entry.name)
-          err = await entry.createWritable().catch(e=>e)
-          assert(err.name === 'NotAllowedError')
+        readonly && assert(await handle.requestPermission({ writable: true }) === 'denied')
+        readonly && assert(await handle.requestPermission({ readable: true }) === 'granted')
+        if (handle.kind === 'file') {
+          result.push(cwd + handle.name)
+          readonly && (err = await handle.createWritable().catch(e=>e))
+          readonly && assert(err.name === 'NotAllowedError')
         } else {
-          result.push(cwd + entry.name + '/')
-          assert(entry.kind === 'directory')
-          dirs.push(entry)
+          result.push(cwd + handle.name + '/')
+          assert(handle.kind === 'directory')
+          dirs.push(handle)
         }
       }
     }
@@ -1052,6 +1054,7 @@ globalThis.ondrop = async evt => {
     console.log(result)
     alert('assertion succeed\n' + result)
   } catch (err) {
+    console.log(err)
     alert('assertion failed - see console')
   }
 }

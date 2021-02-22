@@ -6,14 +6,14 @@ import FileSystemDirectoryHandle from './FileSystemDirectoryHandle.js'
  */
 async function getOriginPrivateDirectory (driver, options = {}) {
   if (typeof DataTransfer === 'function' && driver instanceof DataTransfer) {
-    const entries = [driver.items].map(item =>
+    const entries = [...driver.items].map(item => {
       // @ts-ignore
-      item.webkitGetAsEntry()
-    )
+      return item.webkitGetAsEntry()
+    })
     return import('./util.js').then(m => m.fromDataTransfer(entries))
   }
   if (!driver) {
-    return globalThis.getOriginPrivateDirectory()
+    return globalThis.navigator?.storage?.getDirectory() || globalThis.getOriginPrivateDirectory()
   }
   let module = await driver
   const sandbox = module.default ? await module.default(options) : module(options)
