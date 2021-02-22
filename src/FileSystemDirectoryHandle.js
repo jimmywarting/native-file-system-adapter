@@ -24,15 +24,16 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
 
   async * entries () {
     for await (let entry of wm.get(this).entries())
-      yield entry.kind === 'file' ? new FileSystemFileHandle(entry) : new FileSystemDirectoryHandle(entry)
+      yield [entry.name, entry.kind === 'file' ? new FileSystemFileHandle(entry) : new FileSystemDirectoryHandle(entry)]
   }
 
   /**
    * @deprecated use .entries() instead
    */
-  getEntries() {
+  async * getEntries() {
     console.warn('deprecated, use .entries() instead')
-    return this.entries()
+    for await (let entry of wm.get(this).entries())
+      yield entry.kind === 'file' ? new FileSystemFileHandle(entry) : new FileSystemDirectoryHandle(entry)
   }
 
   /**
@@ -55,6 +56,10 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
     if (name === '') throw new TypeError(`Name can't be an empty string.`)
     if (name === '.' || name === '..' || name.includes('/')) throw new TypeError(`Name contains invalid characters.`)
     return wm.get(this).removeEntry(name, options)
+  }
+
+  [Symbol.asyncIterator]() {
+    return this.entries()
   }
 }
 
