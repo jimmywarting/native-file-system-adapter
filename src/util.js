@@ -40,8 +40,8 @@ export async function fromInput (input) {
       path.shift()
       const name = path.pop()
       const dir = path.reduce((dir, path) => {
-        if (!dir.entries[path]) dir.entries[path] = new FolderHandle(path, false)
-        return dir.entries[path]
+        if (!dir._entries[path]) dir._entries[path] = new FolderHandle(path, false)
+        return dir._entries[path]
       }, root)
       dir.entries[name] = new FileHandle(file.name, file, false)
     })
