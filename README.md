@@ -109,7 +109,7 @@ I recommend to follow up on this links for you to learn more about the API and h
 - https://github.com/wicg/native-file-system
 
 ### Alternatives
-- [browser-nativefs](https://github.com/GoogleChromeLabs/browser-nativefs) by [@tomayac](https://github.com/tomayac): A similar, more like a shim (without `getSystemDirectory`).
+- [browser-fs-access](https://github.com/GoogleChromeLabs/browser-fs-access) by [@tomayac](https://github.com/tomayac): A similar, more like a shim (without `getSystemDirectory`).
 - [StreamSaver](https://github.com/jimmywarting/StreamSaver.js) by [@jimmywarting](https://github.com/jimmywarting): A way to save large data to the disk directly with a writable stream <br><small>(same technique can be achieved if service worker are setup properly)</small>
 - [FileSaver](https://github.com/eligrey/FileSaver.js) by [@eligrey](https://github.com/eligrey): One among the first libs to save blobs to the disk
 
