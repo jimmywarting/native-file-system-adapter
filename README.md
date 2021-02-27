@@ -33,7 +33,36 @@ import {
 } from 'https://cdn.jsdelivr.net/gh/jimmywarting/native-file-system-adapter/src/es6.js'
 
 
-// pick a file
+// the getOriginPrivateDirectory is a legacy name that
+// native filesystem added, have not bother to change it
+
+getOriginPrivateDirectory() // same as calling navigator.storage.getDirectory()
+// Blink's good old sandboxed file system API, can choose between persistent and temporary 
+getOriginPrivateDirectory(import('../src/adapters/sandbox.js'))
+getOriginPrivateDirectory(import('../src/adapters/memory.js'))
+getOriginPrivateDirectory(import('../src/adapters/indexeddb.js'))
+getOriginPrivateDirectory(import('../src/adapters/cache.js'))
+getOriginPrivateDirectory(import('../src/adapters/node.js'), './starting-path')
+
+// The polyfilled (file input) version will turn into a memory adapter
+// You will have readwrite permission on the memory adapter,
+// you might want to transfer (copy) the handle to another adapter
+showOpenFilePicker({_preferPolyfill: boolean, ...sameOpts}).then(fileHandle => {})
+showDirectoryPicker({_preferPolyfill: boolean, ...sameOpts}).then(directoryHandle => {})
+
+// Supports drag and drop also
+ondrop = evt => {
+  evt.preventDefault()
+  getOriginPrivateDirectory(evt.dataTransfer).then(directoryHandle => {
+    // This is kind of a hybrid memory & sandboxed (Entry api) adapter
+    // it works together with old Entry API rather then transferring all of it to a memory adapter 
+    // This would allow you to monitor file changes by calling getFile()
+    // and compare the last modified date or file size
+    // You will have read access but, requesting write permission will reject.
+  })
+}
+
+// request user to select a file
 const fileHandle = await showOpenFilePicker({
   types: [], // default
   multiple: false, // default
@@ -41,35 +70,44 @@ const fileHandle = await showOpenFilePicker({
   _preferPolyfill: false // default
 })
 
+// returns a File Instance
 const file = await fileHandle.getFile()
 
-// store a file
-const folderHandle = await getOriginPrivateDirectory()
-const fileHandle = await folderHandle.getFileHandle(file.name, { create: true })
+// copy the file over to a another adapter
+const rootHandle = await getOriginPrivateDirectory() // same as navigator.store.getDirectory()
+const fileHandle = await rootHandle.getFileHandle(file.name, { create: true })
 await fileHandle.write(file)
 
 // save/download a file
 const fileHandle = await showSaveFilePicker({
   _preferPolyfill: false,
-  _name: 'Untitled.png', // (Deprecated) name being used when preferPolyfill is true
   suggestedName: 'Untitled.png',
-  types: [{}],
-  excludeAcceptAllOption: false,
+  types: [
+    { accept: { "image/png": [ "png" ] } },
+    { accept: { "image/jpg": [ "jpg" ] } },
+    { accept: { "image/webp": [ "webp" ] } }
+  ],
+  excludeAcceptAllOption: false // default
 })
 
+// Look at what extension they chosed
 const extensionChosen = fileHandle.name.split('.').pop()
 
 const blob = {
-  jpg: generateCanvas({ type: 'blob', format: 'jpg' }),
-  png: generateCanvas({ type: 'blob', format: 'png' }),
-  webp: generateCanvas({ type: 'blob', format: 'webp' })
+  jpg: generateCanvasBlob({ type: 'blob', format: 'jpg' }),
+  png: generateCanvasBlob({ type: 'blob', format: 'png' }),
+  webp: generateCanvasBlob({ type: 'blob', format: 'webp' })
 }[extensionChosen]
 
 await blob.stream().pipeTo(fileHandle.getWriter())
+// or 
+var writer = fileHandle.getWriter()
+writer.write(blob)
+writer.close()
 ```
 
 PS: storing a file handle in IndexedDB or sharing it with postMessage isn't currently possible unless you use native.
-
+Will get to it at some point in the feature
 
 ### A note when downloading with the polyfilled version
 
