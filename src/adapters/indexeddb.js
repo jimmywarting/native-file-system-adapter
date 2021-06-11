@@ -1,8 +1,16 @@
+/* global indexedDB, Blob, File, DOMException */
+
 import { errors } from '../util.js'
 
 const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX } = errors
 
 class Sink {
+  /**
+   * @param {IDBDatabase} db
+   * @param {IDBValidKey} id
+   * @param {number} size
+   * @param {File} file
+   */
   constructor (db, id, size, file) {
     this.db = db
     this.id = id
@@ -10,12 +18,17 @@ class Sink {
     this.position = 0
     this.file = file
   }
+
   write (chunk) {
     if (typeof chunk === 'object') {
       if (chunk.type === 'write') {
         if (Number.isInteger(chunk.position) && chunk.position >= 0) {
           if (this.size < chunk.position) {
-            throw new DOMException(...INVALID)
+            this.file = new File(
+              [this.file, new ArrayBuffer(chunk.position - this.size)],
+              this.file.name,
+              this.file
+            )
           }
           this.position = chunk.position
         }
@@ -37,8 +50,8 @@ class Sink {
         if (Number.isInteger(chunk.size) && chunk.size >= 0) {
           let file = this.file
           file = chunk.size < this.size
-            ? file.slice(0, chunk.size)
-            : new File([file, new Uint8Array(chunk.size - this.size)], file.name)
+            ? new File([file.slice(0, chunk.size)], file.name, file)
+            : new File([file, new Uint8Array(chunk.size - this.size)], file.name, file)
 
           this.size = file.size
           if (this.position > file.size) {
@@ -74,47 +87,66 @@ class Sink {
     this.position += chunk.size
     this.file = blob
   }
+
   close () {
-    return new Promise((rs,rj) => {
+    return new Promise((resolve, reject) => {
       const [tx, table] = store(this.db)
       table.get(this.id).onsuccess = (evt) => {
         evt.target.result
           ? table.put(this.file, this.id)
-          : rj(new DOMException(...GONE))
+          : reject(new DOMException(...GONE))
       }
-      tx.oncomplete = () => rs()
+      tx.oncomplete = () => resolve()
     })
   }
 }
 
 class FileHandle {
+  /**
+   * @param {IDBDatabase} db
+   * @param {IDBValidKey} id
+   * @param {string} name
+   */
   constructor (db, id, name) {
-    this.db = db
-    this.id = id
+    this._db = db
+    this._id = id
     this.name = name
     this.kind = 'file'
     this.readable = true
     this.writable = true
   }
+
+  /** @param {FileHandle} other */
+  isSameEntry (other) {
+    return this._id === other._id
+  }
+
   async getFile () {
-    const [tx, table] = store(this.db)
-    const file = await new Promise(rs => table.get(this.id).onsuccess = evt => rs(evt.target.result))
+    /** @type {File} */
+    const file = await new Promise(resolve => {
+      store(this._db)[1].get(this._id).onsuccess = evt => resolve(evt.target.result)
+    })
     if (!file) throw new DOMException(...GONE)
     return file
   }
+
   async createWritable (opts) {
     const file = await this.getFile()
-    return new Sink(this.db, this.id, file.size, file)
+    return new Sink(this._db, this._id, file.size, file)
   }
 }
 
+/**
+ * @param {IDBDatabase} db
+ * @returns {[IDBTransaction, IDBObjectStore]}
+ */
 function store (db) {
   const tx = db.transaction('entries', 'readwrite', { durability: 'relaxed' })
   return [tx, tx.objectStore('entries')]
 }
 
-function rimraf(evt, toDelete, recursive = true) {
-  let { source, result } = evt.target
+function rimraf (evt, toDelete, recursive = true) {
+  const { source, result } = evt.target
   for (const [id, isFile] of Object.values(toDelete || result)) {
     if (isFile) source.delete(id)
     else if (recursive) {
@@ -133,103 +165,120 @@ function rimraf(evt, toDelete, recursive = true) {
 }
 
 class FolderHandle {
-  constructor(db, id, name) {
-    this.db = db
-    this.id = id
+  /**
+   * @param {IDBDatabase} db
+   * @param {IDBValidKey} id
+   * @param {string} name
+   */
+  constructor (db, id, name) {
+    this._db = db
+    this._id = id
     this.kind = 'directory'
     this.name = name
     this.readable = true
     this.writable = true
   }
+
   async * entries () {
-    const [tx, table] = store(this.db)
-    const entries = await new Promise(rs => table.get(this.id).onsuccess = evt => rs(evt.target.result))
+    const entries = await new Promise(resolve => {
+      store(this._db)[1].get(this._id).onsuccess = evt => resolve(evt.target.result)
+    })
     if (!entries) throw new DOMException(...GONE)
-    for (let [name, [id, isFile]] of Object.entries(entries)) {
-      yield isFile
-        ? new FileHandle(this.db, id, name)
-        : new FolderHandle(this.db, id, name)
+    for (const [name, [id, isFile]] of Object.entries(entries)) {
+      yield [name, isFile
+        ? new FileHandle(this._db, id, name)
+        : new FolderHandle(this._db, id, name)
+      ]
     }
   }
+
+  /** @param {FolderHandle} other  */
+  isSameEntry (other) {
+    return this._id === other._id
+  }
+
   getDirectoryHandle (name, opts = {}) {
-    return new Promise((rs, rj) => {
-      const [ tx, table ] = store(this.db)
-      table.get(this.id).onsuccess = evt => {
-        const entries = evt.target.result
+    return new Promise((resolve, reject) => {
+      const table = store(this._db)[1]
+      const req = table.get(this._id)
+      req.onsuccess = () => {
+        const entries = req.result
         const entry = entries[name]
         entry // entry exist
           ? entry[1] // isFile?
-            ? rj(new DOMException(...MISMATCH))
-            : rs(new FolderHandle(this.db, entry[0], name))
+              ? reject(new DOMException(...MISMATCH))
+              : resolve(new FolderHandle(this._db, entry[0], name))
           : opts.create
             ? table.add({}).onsuccess = evt => {
-              const id = evt.target.result
-              entries[name] = [id, false]
-              table.put(entries, this.id)
-                .onsuccess = () => rs(new FolderHandle(this.db, id, name))
-            }
-            : rj(new DOMException(...GONE))
+                const id = evt.target.result
+                entries[name] = [id, false]
+                table.put(entries, this._id)
+                  .onsuccess = () => resolve(new FolderHandle(this._db, id, name))
+              }
+            : reject(new DOMException(...GONE))
       }
     })
   }
+
   getFileHandle (name, opts = {}) {
-    return new Promise((rs, rj) => {
-      const [tx, table] = store(this.db)
-      const query = table.get(this.id)
-      query.onsuccess = evt => {
-        const entries = evt.target.result
+    return new Promise((resolve, reject) => {
+      const table = store(this._db)[1]
+      const query = table.get(this._id)
+      query.onsuccess = () => {
+        const entries = query.result
         const entry = entries[name]
-        if (entry && entry[1]) rs(new FileHandle(this.db, entry[0], name))
-        if (entry && !entry[1]) rj(new DOMException(...MISMATCH))
-        if (!entry && !opts.create) rj(new DOMException(...GONE))
+        if (entry && entry[1]) resolve(new FileHandle(this._db, entry[0], name))
+        if (entry && !entry[1]) reject(new DOMException(...MISMATCH))
+        if (!entry && !opts.create) reject(new DOMException(...GONE))
         if (!entry && opts.create) {
-          const query = table.put(new File([], name))
-          query.onsuccess = (evt) => {
-            const id = evt.target.result
+          const q = table.put(new File([], name))
+          q.onsuccess = () => {
+            const id = q.result
             entries[name] = [id, true]
-            const query = table.put(entries, this.id)
+            const query = table.put(entries, this._id)
             query.onsuccess = () => {
-              rs(new FileHandle(this.db, id, name))
+              resolve(new FileHandle(this._db, id, name))
             }
           }
         }
       }
     })
   }
+
   async removeEntry (name, opts) {
-    return new Promise((rs, rj) => {
-      const [tx, table] = store(this.db)
-      const cwdQ = table.get(this.id)
+    return new Promise((resolve, reject) => {
+      const [tx, table] = store(this._db)
+      const cwdQ = table.get(this._id)
       cwdQ.onsuccess = (evt) => {
         const cwd = cwdQ.result
-        const toDelete = {_:cwd[name]}
+        const toDelete = { _: cwd[name] }
         if (!toDelete._) {
-          return rj(new DOMException(...GONE))
+          return reject(new DOMException(...GONE))
         }
         delete cwd[name]
-        table.put(cwd, this.id)
+        table.put(cwd, this._id)
         rimraf(evt, toDelete, !!opts.recursive)
       }
-      tx.oncomplete = rs
-      tx.onerror = rj
+      tx.oncomplete = resolve
+      tx.onerror = reject
       tx.onabort = () => {
-        rj(new DOMException(...MOD_ERR))
+        reject(new DOMException(...MOD_ERR))
       }
     })
   }
 }
 
-export default (opts = { persistent: false }) => new Promise((rs,rj) => {
+export default (opts = { persistent: false }) => new Promise((resolve) => {
   const request = indexedDB.open('fileSystem')
 
-  request.onupgradeneeded = evt => {
-    const db = evt.target.result
+  request.onupgradeneeded = () => {
+    const db = request.result
     db.createObjectStore('entries', { autoIncrement: true }).transaction.oncomplete = evt => {
       db.transaction('entries', 'readwrite').objectStore('entries').add({})
     }
   }
 
-  request.onsuccess = evt => {
-    rs(new FolderHandle(evt.target.result, 1, ''))
+  request.onsuccess = () => {
+    resolve(new FolderHandle(request.result, 1, ''))
   }
 })

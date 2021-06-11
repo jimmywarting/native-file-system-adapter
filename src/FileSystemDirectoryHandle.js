@@ -1,70 +1,68 @@
 import FileSystemHandle from './FileSystemHandle.js'
 import FileSystemFileHandle from './FileSystemFileHandle.js'
 
-const wm = new WeakMap()
-
 class FileSystemDirectoryHandle extends FileSystemHandle {
-  constructor(meta) {
-    super(meta)
-    wm.set(this, meta)
-    this.name = meta.name
+  /** @type {FileSystemDirectoryHandle} */
+  #adapter
+
+  constructor (adapter) {
+    super(adapter)
+    this.#adapter = adapter
   }
 
   /**
-   * @param  {string} name Name of the directory
-   * @param  {object} [options]
-   * @param  {boolean} [options.create] create the directory if don't exist
+   * @param {string} name Name of the directory
+   * @param {object} [options]
+   * @param {boolean} [options.create] create the directory if don't exist
    * @returns {Promise<FileSystemDirectoryHandle>}
    */
   async getDirectoryHandle (name, options = {}) {
     if (name === '') throw new TypeError(`Name can't be an empty string.`)
     if (name === '.' || name === '..' || name.includes('/')) throw new TypeError(`Name contains invalid characters.`)
-    return new FileSystemDirectoryHandle(await wm.get(this).getDirectoryHandle(name, options))
+    return new FileSystemDirectoryHandle(await this.#adapter.getDirectoryHandle(name, options))
   }
 
+  /** @returns {AsyncGenerator<[string, FileSystemHandle], void, unknown>} */
   async * entries () {
-    for await (let entry of wm.get(this).entries())
+    for await (const [_, entry] of this.#adapter.entries())
       yield [entry.name, entry.kind === 'file' ? new FileSystemFileHandle(entry) : new FileSystemDirectoryHandle(entry)]
   }
 
-  /**
-   * @deprecated use .entries() instead
-   */
+  /** @deprecated use .entries() instead */
   async * getEntries() {
     console.warn('deprecated, use .entries() instead')
-    for await (let entry of wm.get(this).entries())
+    for await (let entry of this.#adapter.entries())
       yield entry.kind === 'file' ? new FileSystemFileHandle(entry) : new FileSystemDirectoryHandle(entry)
   }
 
   /**
-   * @param  {string} name Name of the file
-   * @param  {object} [options]
-   * @param  {boolean} [options.create] create the file if don't exist
+   * @param {string} name Name of the file
+   * @param {object} [options]
+   * @param {boolean} [options.create] create the file if don't exist
    * @returns {Promise<FileSystemFileHandle>}
    */
   async getFileHandle (name, options) {
     if (name === '') throw new TypeError(`Name can't be an empty string.`)
     if (name === '.' || name === '..' || name.includes('/')) throw new TypeError(`Name contains invalid characters.`)
-    return new FileSystemFileHandle(await wm.get(this).getFileHandle(name, options))
+    return new FileSystemFileHandle(await this.#adapter.getFileHandle(name, options))
   }
 
   /**
    * @param {string} name
-   * @param {object} options
+   * @param {object} [options]
+   * @param {boolean} [options.recursive]
    */
   async removeEntry (name, options = {}) {
     if (name === '') throw new TypeError(`Name can't be an empty string.`)
     if (name === '.' || name === '..' || name.includes('/')) throw new TypeError(`Name contains invalid characters.`)
-    return wm.get(this).removeEntry(name, options)
+    options.recursive = !!options.recursive // cuz node's fs.rm require boolean
+    return this.#adapter.removeEntry(name, options)
   }
 
   [Symbol.asyncIterator]() {
     return this.entries()
   }
 }
-
-FileSystemDirectoryHandle.prototype.kind = ''
-FileSystemDirectoryHandle.prototype.name = ''
 
 Object.defineProperty(FileSystemDirectoryHandle.prototype, Symbol.toStringTag, {
 	value: 'FileSystemDirectoryHandle',
@@ -81,3 +79,4 @@ Object.defineProperties(FileSystemDirectoryHandle.prototype, {
 })
 
 export default FileSystemDirectoryHandle
+export { FileSystemDirectoryHandle }

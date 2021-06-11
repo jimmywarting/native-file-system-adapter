@@ -1,22 +1,23 @@
 import FileSystemHandle from './FileSystemHandle.js'
 import FileSystemWritableFileStream from './FileSystemWritableFileStream.js'
 
-const wm = new WeakMap()
-
 class FileSystemFileHandle extends FileSystemHandle {
-  constructor (meta) {
-    super(meta)
-    wm.set(this, meta)
+  /** @type {FileSystemFileHandle} */
+  #adapter
+
+  constructor (adapter) {
+    super(adapter)
+    this.#adapter = adapter
   }
 
   /**
    * @param  {Object} [options={}]
    * @param  {boolean} [options.keepExistingData]
-   * @return {Promise<FileSystemWritableFileStream>}
+   * @returns {Promise<FileSystemWritableFileStream>}
    */
   async createWritable (options = {}) {
     return new FileSystemWritableFileStream(
-      await wm.get(this).createWritable(options)
+      await this.#adapter.createWritable(options)
     )
   }
 
@@ -24,7 +25,7 @@ class FileSystemFileHandle extends FileSystemHandle {
    * @returns {Promise<File>}
    */
   getFile () {
-    return Promise.resolve(wm.get(this).getFile())
+    return Promise.resolve(this.#adapter.getFile())
   }
 }
 
@@ -41,3 +42,4 @@ Object.defineProperties(FileSystemFileHandle.prototype, {
 })
 
 export default FileSystemFileHandle
+export { FileSystemFileHandle }

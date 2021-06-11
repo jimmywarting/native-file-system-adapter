@@ -5,23 +5,34 @@ const ABORT = 1
 const CLOSE = 2
 const PING = 3
 
+/** @implements {UnderlyingSource} */
 class MessagePortSource {
+
+  /** @type {ReadableStreamController<any>} controller */
+  controller
+
+  /** @param {MessagePort} port */
   constructor (port) {
     this.port = port;
     this.port.onmessage = evt => this.onMessage(evt.data)
   }
+
+  /**
+   * @param {ReadableStreamController<any>} controller
+   */
   start (controller) {
     this.controller = controller
   }
-  pull () {
-    this.port.postMessage({ type: PULL })
-  }
+
+  /** @param {Error} reason */
   cancel (reason) {
-    // Firefox can notifiy a cancel event, chrome can't
+    // Firefox can notify a cancel event, chrome can't
     // https://bugs.chromium.org/p/chromium/issues/detail?id=638494
     this.port.postMessage({ type: ERROR, reason: reason.message })
     this.port.close()
   }
+
+  /** @param {{ type: number; chunk: Uint8Array; reason: any; }} message */
   onMessage (message) {
     // enqueue() will call pull() if needed when there's no backpressure
     if (message.type === WRITE) this.controller.enqueue(message.chunk)

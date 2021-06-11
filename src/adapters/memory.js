@@ -1,8 +1,13 @@
 import { errors } from '../util.js'
+/** @type {typeof window.File} */
+const File = globalThis.File || await import('fetch-blob/file.js').then(m => m.File)
+/** @type {typeof window.Blob} */
+const Blob = globalThis.Blob || await import('fetch-blob').then(m => m.Blob)
 
 const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX, SECURITY, DISALLOWED } = errors
 
 export class Sink {
+  /** @param {FileHandle} fileHandle */
   constructor (fileHandle) {
     this.fileHandle = fileHandle
     this.file = fileHandle.file
@@ -10,13 +15,19 @@ export class Sink {
     this.position = 0
   }
   write (chunk) {
+    let file = this.file
+
     if (typeof chunk === 'object') {
       if (chunk.type === 'write') {
         if (Number.isInteger(chunk.position) && chunk.position >= 0) {
-          if (this.size < chunk.position) {
-            throw new DOMException(...INVALID)
-          }
           this.position = chunk.position
+          if (this.size < chunk.position) {
+            this.file = new File(
+              [this.file, new ArrayBuffer(chunk.position - this.size)],
+              this.file.name,
+              this.file
+            )
+          }
         }
         if (!('data' in chunk)) {
           throw new DOMException(...SYNTAX('write requires a data argument'))
@@ -34,9 +45,8 @@ export class Sink {
         }
       } else if (chunk.type === 'truncate') {
         if (Number.isInteger(chunk.size) && chunk.size >= 0) {
-          let file = this.file
           file = chunk.size < this.size
-            ? file.slice(0, chunk.size)
+            ? new File([file.slice(0, chunk.size)], file.name, file)
             : new File([file, new Uint8Array(chunk.size - this.size)], file.name)
 
           this.size = file.size
@@ -74,9 +84,6 @@ export class Sink {
     this.position += chunk.size
 
     this.file = blob
-
-    // Maybe shouldn't do this:
-    // this.fileHandle.file = this.file
   }
   close () {
     if (this.fileHandle.deleted) throw new DOMException(...GONE)
@@ -91,8 +98,8 @@ export class Sink {
 }
 
 export class FileHandle {
-  constructor (name, file, writable = true) {
-    this.file = file || new File([], name)
+  constructor (name = '', file = new File([], name), writable = true) {
+    this.file = file
     this.name = name
     this.kind = 'file'
     this.deleted = false
@@ -111,6 +118,10 @@ export class FileHandle {
     return new Sink(this)
   }
 
+  isSameEntry (other) {
+    return this === other
+  }
+
   destroy () {
     this.deleted = true
     this.file = null
@@ -119,10 +130,12 @@ export class FileHandle {
 
 export class FolderHandle {
 
+  /** @param {string} name */
   constructor (name, writable = true) {
     this.name = name
     this.kind = 'directory'
     this.deleted = false
+    /** @type {Object.<string, (FolderHandle|FileHandle)>} */
     this._entries = {}
     this.writable = writable
     this.readable = true
@@ -130,9 +143,14 @@ export class FolderHandle {
 
   async * entries () {
     if (this.deleted) throw new DOMException(...GONE)
-    yield* Object.values(this._entries)
+    yield* Object.entries(this._entries)
   }
 
+  isSameEntry (other) {
+    return this === other
+  }
+
+  /** @param {string} name */
   getDirectoryHandle (name, opts = {}) {
     if (this.deleted) throw new DOMException(...GONE)
     const entry = this._entries[name]
@@ -151,6 +169,7 @@ export class FolderHandle {
     }
   }
 
+  /** @param {string} name */
   getFileHandle (name, opts = {}) {
     const entry = this._entries[name]
     const isFile = entry instanceof FileHandle

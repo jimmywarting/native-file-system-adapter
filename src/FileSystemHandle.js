@@ -1,17 +1,24 @@
 const wm = new WeakMap()
 
 class FileSystemHandle {
-  constructor (meta) {
-    /** @type {"file|directory"} */
-    this.kind = meta.kind
-    /** @type {string} */
-    this.name = meta.name
-    wm.set(this, meta)
+  /** @type {FileSystemHandle} */
+  #adapter
+
+  /** @type {string} */
+  name
+  /** @type {('file'|'directory')} */
+  kind
+
+  /** @param {FileSystemHandle & {writable}} adapter */
+  constructor (adapter) {
+    this.kind = adapter.kind
+    this.name = adapter.name
+    this.#adapter = adapter
   }
 
   async queryPermission (options = {}) {
     if (options.readable) return 'granted'
-    const handle = wm.get(this)
+    const handle = this.#adapter
     return handle.queryPermission ?
       handle.queryPermission(options) :
       handle.writable
@@ -21,8 +28,27 @@ class FileSystemHandle {
 
   async requestPermission (options = {}) {
     if (options.readable) return 'granted'
-    const handle = wm.get(this)
+    const handle = this.#adapter
     return handle.writable ? 'granted' : 'denied'
+  }
+
+  /**
+   * Attempts to remove the entry represented by handle from the underlying file system.
+   *
+   * @param {object} options
+   * @param {boolean} [options.recursive=false]
+   */
+  async remove (options = {}) {
+    this.#adapter.remove(options)
+  }
+
+  /**
+   * @param {FileSystemHandle} other
+   */
+  async isSameEntry (other) {
+    if (this === other) return true
+    if (this.kind !== other.kind) return false
+    return this.#adapter.isSameEntry(other.#adapter)
   }
 }
 
@@ -34,3 +60,4 @@ Object.defineProperty(FileSystemHandle.prototype, Symbol.toStringTag, {
 })
 
 export default FileSystemHandle
+export { FileSystemHandle }

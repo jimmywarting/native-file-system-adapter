@@ -1,3 +1,5 @@
+/* global Blob, DOMException, File, Response, caches, location */
+
 import { errors } from '../util.js'
 
 const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX } = errors
@@ -7,18 +9,19 @@ const FILE = () => ({ headers: { 'content-type': 'file', 'last-modified': Date.n
 
 class Sink {
   constructor (cache, path, file) {
-    this.cache = cache
+    this._cache = cache
     this.path = path
     this.size = file.size
     this.position = 0
     this.file = file
   }
+
   write (chunk, c) {
     if (typeof chunk === 'object') {
       if (chunk.type === 'write') {
         if (Number.isInteger(chunk.position) && chunk.position >= 0) {
           if (this.size < chunk.position) {
-            throw new DOMException(...INVALID)
+            this.file = new Blob([this.file, new ArrayBuffer(chunk.position - this.size)])
           }
           this.position = chunk.position
         }
@@ -77,116 +80,134 @@ class Sink {
     this.position += chunk.size
     this.file = blob
   }
+
   async close () {
-    const [r] = await this.cache.keys(this.path)
+    const [r] = await this._cache.keys(this.path)
     if (!r) throw new DOMException(...GONE)
-    return this.cache.put(this.path, new Response(this.file, FILE()))
+    return this._cache.put(this.path, new Response(this.file, FILE()))
   }
 }
 
 export class FileHandle {
   constructor (path, cache) {
-    this.cache = cache
+    this._cache = cache
     this.path = path
     this.kind = 'file'
     this.writable = true
     this.readable = true
   }
+
   get name () {
     return this.path.split('/').pop()
   }
+
+  isSameEntry (other) {
+    return this === other
+  }
+
   async getFile () {
-    const res = await this.cache.match(this.path)
+    const res = await this._cache.match(this.path)
     if (!res) throw new DOMException(...GONE)
     const blob = await res.blob()
     const file = new File([blob], this.name, { lastModified: +res.headers.get('last-modified') })
     return file
   }
+
   async createWritable (opts) {
-    return new Sink(this.cache, this.path, await this.getFile())
+    return new Sink(this._cache, this.path, await this.getFile())
     // let p, rs
     // p = new Promise(resolve => rs = resolve)
     // const { readable, writable } = new TransformStream(new Sink(p))
-    // this.cache.put(this.path, new Response(readable, FILE())).then(rs)
+    // this._cache.put(this.path, new Response(readable, FILE())).then(rs)
     // return writable.getWriter()
   }
 }
 
 export class FolderHandle {
+  /**
+   * @param {string} dir
+   * @param {Cache} cache
+   */
   constructor (dir, cache) {
-    this.dir = dir
+    this._dir = dir
     this.writable = true
     this.readable = true
-    this.cache = cache
+    this._cache = cache
     this.kind = 'directory'
     this.name = dir.split('/').pop()
   }
+
   async * entries () {
-    for (let [path, isFile] of Object.entries(await this._tree)) {
-      yield isFile ? new FileHandle(path, this.cache) : new FolderHandle(path, this.cache)
+    for (const [path, isFile] of Object.entries(await this._tree)) {
+      yield [path.split('/').pop(), isFile ? new FileHandle(path, this._cache) : new FolderHandle(path, this._cache)]
     }
   }
+
+  /** @param {FolderHandle} other  */
+  isSameEntry (other) {
+    return this._dir === other._dir
+  }
+
   async getDirectoryHandle (name, opts = {}) {
-    const path = this.dir.endsWith('/') ? this.dir + name : `${this.dir}/${name}`
+    const path = this._dir.endsWith('/') ? this._dir + name : `${this._dir}/${name}`
     const tree = await this._tree
     if (tree.hasOwnProperty(path)) {
       const isFile = tree[path]
       if (isFile) throw new DOMException(...MISMATCH)
-      return new FolderHandle(path, this.cache)
+      return new FolderHandle(path, this._cache)
     } else {
       if (opts.create) {
         tree[path] = false
-        await this.cache.put(path, new Response('{}', DIR))
+        await this._cache.put(path, new Response('{}', DIR))
         await this._save(tree)
-        return new FolderHandle(path, this.cache)
+        return new FolderHandle(path, this._cache)
       }
       throw new DOMException(...GONE)
     }
-    // return new Promise((rs, rj) => {
-    //   this.dir.getDirectory(name, opts, dir => {
-    //     rs(new FolderHandle(dir))
-    //   }, rj)
-    // })
   }
-  get _tree() {
-    return this.cache.match(this.dir).then(r=>r.json()).catch(e => {
+
+  get _tree () {
+    return this._cache.match(this._dir).then(r => r.json()).catch(e => {
       throw new DOMException(...GONE)
     })
   }
+
   _save (tree) {
-    return this.cache.put(this.dir, new Response(JSON.stringify(tree), DIR))
+    return this._cache.put(this._dir, new Response(JSON.stringify(tree), DIR))
   }
+
   async getFileHandle (name, opts = {}) {
-    const path = this.dir.endsWith('/') ? this.dir + name : `${this.dir}/${name}`
+    const path = this._dir.endsWith('/') ? this._dir + name : `${this._dir}/${name}`
     const tree = await this._tree
     if (tree.hasOwnProperty(path)) {
       const isFile = tree[path]
       if (!isFile) throw new DOMException(...MISMATCH)
-      return new FileHandle(path, this.cache)
+      return new FileHandle(path, this._cache)
     } else {
       if (opts.create) {
         const tree = await this._tree
         tree[path] = true
-        await this.cache.put(path, new Response('', FILE()))
+        await this._cache.put(path, new Response('', FILE()))
         await this._save(tree)
-        return new FileHandle(path, this.cache)
+        return new FileHandle(path, this._cache)
       } else {
         throw new DOMException(...GONE)
       }
     }
   }
+
   async removeEntry (name, opts) {
     const tree = await this._tree
-    const path = this.dir.endsWith('/') ? this.dir + name : `${this.dir}/${name}`
+    const path = this._dir.endsWith('/') ? this._dir + name : `${this._dir}/${name}`
     if (tree.hasOwnProperty(path)) {
       if (opts.recursive) {
         const toDelete = [...Object.entries(tree)]
         while (toDelete.length) {
           const [path, isFile] = toDelete.pop()
           if (isFile) {
-            await this.cache.delete(path)
+            await this._cache.delete(path)
           } else {
-            const e = await this.cache.match(path).then(r => r.json())
+            const e = await this._cache.match(path).then(r => r.json())
             toDelete.push(...Object.entries(e))
           }
         }
@@ -195,14 +216,14 @@ export class FolderHandle {
         const isFile = tree[path]
         delete tree[path]
         if (isFile) {
-          await this.cache.delete(path)
+          await this._cache.delete(path)
         } else {
-          const e = await this.cache.match(path).then(r => r.json())
+          const e = await this._cache.match(path).then(r => r.json())
           const keys = Object.keys(e)
           if (keys.length) {
             throw new DOMException(...MOD_ERR)
           } else {
-            await this.cache.delete(path)
+            await this._cache.delete(path)
           }
         }
       }

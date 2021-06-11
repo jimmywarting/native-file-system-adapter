@@ -21,13 +21,14 @@ async function showOpenFilePicker (options = {}) {
   const input = document.createElement('input')
   input.type = 'file'
   input.multiple = opts.multiple
-  input.accept = opts.accepts.map(e => [...(e.extensions || []).map(e=>'.'+e), ...e.mimeTypes || []]).flat().join(',')
+  input.accept = opts.accepts.map(e => [...(e.extensions || []).map(e => '.' + e), ...e.mimeTypes || []]).flat().join(',')
 
-  return new Promise(rs => {
+  return new Promise(resolve => {
     const p = import('./util.js').then(m => m.fromInput)
-    input.onchange = () => rs(p.then(fn => fn(input)))
+    input.onchange = () => resolve(p.then(fn => fn(input)))
     input.click()
   })
 }
 
 export default showOpenFilePicker
+export { showOpenFilePicker }

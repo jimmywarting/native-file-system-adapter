@@ -1,3 +1,5 @@
+/* global Blob, DOMException, Response, MessageChannel */
+
 import { errors } from '../util.js'
 
 const { GONE } = errors
@@ -11,6 +13,7 @@ export class FileHandle {
     this.name = name
     this.kind = 'file'
   }
+
   getFile () {
     throw new DOMException(...GONE)
   }
@@ -28,14 +31,14 @@ export class FileHandle {
     const sw = await navigator.serviceWorker.getRegistration()
     const link = document.createElement('a')
     const ts = new TransformStream()
-    let sink = ts.writable
+    const sink = ts.writable
 
     link.download = this.name
 
     if (isSafari || !sw) {
       let chunks = []
       ts.readable.pipeTo(new WritableStream({
-        write(chunk) {
+        write (chunk) {
           chunks.push(new Blob([chunk]))
         },
         close () {
@@ -59,7 +62,7 @@ export class FileHandle {
       const keepAlive = setTimeout(() => sw.active.postMessage(0), 10000)
 
       ts.readable.pipeThrough(new TransformStream({
-        transform(chunk, ctrl) {
+        transform (chunk, ctrl) {
           if (chunk instanceof Uint8Array) return ctrl.enqueue(chunk)
           const reader = new Response(chunk).body.getReader()
           const pump = _ => reader.read().then(e => e.done ? 0 : pump(ctrl.enqueue(e.value)))
@@ -74,7 +77,7 @@ export class FileHandle {
         url: sw.scope + fileName,
         headers,
         readablePort
-      }, [ readablePort ])
+      }, [readablePort])
 
       // Trigger the download with a hidden iframe
       const iframe = document.createElement('iframe')

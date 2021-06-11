@@ -8,8 +8,13 @@ export const errors = {
   DISALLOWED: ['The request is not allowed by the user agent or the platform in the current context.', 'NotAllowedError']
 }
 
+export const config = {
+  writable: globalThis.WritableStream
+}
+
 export async function fromDataTransfer (entries) {
-  const [ memory, sandbox, FileSystemDirectoryHandle ] = await Promise.all([
+  console.warn('deprecated fromDataTransfer - use `dt.items[0].getAsFileSystemHandle()` instead')
+  const [memory, sandbox, FileSystemDirectoryHandle] = await Promise.all([
     import('./adapters/memory.js'),
     import('./adapters/sandbox.js'),
     import('./FileSystemDirectoryHandle.js')
@@ -31,7 +36,7 @@ export async function fromInput (input) {
   const FileSystemDirectoryHandle = dir.default
   const FileSystemFileHandle = file.default
 
-  let files = [...input.files]
+  const files = [...input.files]
   if (input.webkitdirectory) {
     const rootName = files[0].webkitRelativePath.split('/', 1)[0]
     const root = new FolderHandle(rootName, false)

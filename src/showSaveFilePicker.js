@@ -1,7 +1,5 @@
 const native = globalThis.showSaveFilePicker
-const def = {
-  accepts: []
-}
+
 /**
  * @param {Object} [options]
  * @param {boolean} [options.excludeAcceptAllOption=false] Prevent user for selecting any
@@ -27,3 +25,4 @@ async function showSaveFilePicker (options = {}) {
 }
 
 export default showSaveFilePicker
+export { showSaveFilePicker }

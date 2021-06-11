@@ -1,0 +1,15 @@
+{
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+  "files.trimTrailingWhitespace": true,
+  "editor.tabSize": 2,
+  "javascript.preferences.quoteStyle": "single",
+  "javascript.format.insertSpaceAfterConstructor": true,
+  "javascript.format.insertSpaceAfterCommaDelimiter": true,
+  "javascript.format.insertSpaceAfterFunctionKeywordForAnonymousFunctions": true,
+  "javascript.format.semicolons": "remove",
+  "javascript.suggest.completeFunctionCalls": true,
+  "javascript.suggest.completeJSDocs": true,
+  "javascript.suggest.autoImports": true,
+  "js/ts.implicitProjectConfig.checkJs": true,
+}

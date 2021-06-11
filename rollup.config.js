@@ -1,14 +1,18 @@
 import { terser } from 'rollup-plugin-terser';
-import urlImport from 'rollup-plugin-url-import'
+import multiInput from 'rollup-plugin-multi-input';
+
+// import urlImport from 'rollup-plugin-url-import'
 
 export default {
-  input: 'src/es6.js',
+  input: ['src/**/*.js'],
   output: {
     dir: 'dist',
-    format: 'es'
+    format: 'es',
+
   },
   plugins: [
-    urlImport(),
+    // urlImport(),
     terser(),
+    multiInput()
   ],
 };

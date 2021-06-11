@@ -15,5 +15,5 @@ export {
   getOriginPrivateDirectory,
   showDirectoryPicker,
   showOpenFilePicker,
-  showSaveFilePicker,
+  showSaveFilePicker
 }

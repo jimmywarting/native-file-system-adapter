@@ -49,7 +49,7 @@
       // scope: './'
     })
     </script>
-    <script type=module src="./test.js"></script>
+    <script type="module" src="./test.js"></script>
     <table id="table">
       <caption>Browser storage</caption>
       <thead><tr>
@@ -135,13 +135,15 @@
         <tr>
           <td width="1">
             <center>Drag and drop</center><br>
-            The DataTransfer are very similar to Blinks sandboxed filesystem.
-            so it would be easy to just convert the event to a FileSystemDirectoryHandle
-            and use the sandbox adapter on it.
+            The DataTransfer have implemented <code>DataTransferItem.prototype.getAsFileSystemHandle()</code>
+            That lets you convert a item into a filesystem handle. This is polyfilled for you.
             <pre style="background: #fff; box-sizing: border-box; color: #68615e; display: block; height: 100%; overflow-x: auto; padding: 0.5em;"><code style="height: 100%;">elm.ondragover = <span class="hljs-function"><span style="color: #df5320;">evt</span> =&gt;</span> evt.preventDefault()
-elm.ondrop = <span class="hljs-function"><span style="color: #df5320;">evt</span> =&gt;</span> {
+elm.ondrop = <span class="hljs-function"><span style="color: #df5320;">async evt</span> =&gt;</span> {
   evt.preventDefault()
-  getOriginPrivateDirectory(evt.dataTransfer)
+  for (const dataTransferItem of dataTransfer.items) {
+    const handle = await dataTransferItem.getAsFileSystemHandle()
+    console.log(handle.kind)
+  }
 }</code></pre>
           </td>
           <td>Drop anywhere<br>on page</td>

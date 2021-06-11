@@ -1,14 +1,15 @@
 /* global globalThis */
 
-// @ts-ignore
-import {WritableStream as _WritableStream} from 'https://cdn.jsdelivr.net/npm/web-streams-polyfill@2.1.0/dist/ponyfill.es2018.mjs'
-// import {WritableStream as _WritableStream} from 'web-streams-polyfill'
-// import ponyfill from 'web-streams-polyfill'
-// const _WritableStream = ponyfill.WritableStream
+/** @type {typeof WritableStream} */
+const ws = globalThis.WritableStream || await import('https://cdn.jsdelivr.net/npm/web-streams-polyfill@3/dist/ponyfill.es2018.mjs').then(r => r.WritableStream).catch(() => import('web-streams-polyfill').then(r => r.WritableStream))
 
-class FileSystemWritableFileStream extends (globalThis.WritableStream || _WritableStream) {
-  constructor (sink) {
-    super(sink)
+class FileSystemWritableFileStream extends ws {
+  constructor (...args) {
+    super(...args)
+
+    // Stupid Safari hack to extend native classes
+    // https://bugs.webkit.org/show_bug.cgi?id=226201
+    Object.setPrototypeOf(this, FileSystemWritableFileStream.prototype)
 
     /** @private */
     this._closed = false
@@ -22,19 +23,16 @@ class FileSystemWritableFileStream extends (globalThis.WritableStream || _Writab
     // return super.close ? super.close() : this.getWriter().close()
   }
 
-  /**
-   * @param {number} position
-   */
+  /** @param {number} position */
   seek (position) {
     return this.write({ type: 'seek', position })
   }
 
-  /**
-   * @param {number} size
-   */
+  /** @param {number} size */
   truncate (size) {
     return this.write({ type: 'truncate', size })
   }
+
   write (data) {
     if (this._closed) {
       return Promise.reject(new TypeError('Cannot write to a CLOSED writable stream'))
@@ -62,3 +60,4 @@ Object.defineProperties(FileSystemWritableFileStream.prototype, {
 })
 
 export default FileSystemWritableFileStream
+export { FileSystemWritableFileStream }

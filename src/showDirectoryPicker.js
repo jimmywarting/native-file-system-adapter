@@ -14,11 +14,12 @@ async function showDirectoryPicker (options = {}) {
   input.type = 'file'
   input.webkitdirectory = true
 
-  return new Promise(rs => {
+  return new Promise(resolve => {
     const p = import('./util.js').then(m => m.fromInput)
-    input.onchange = () => rs(p.then(fn => fn(input)))
+    input.onchange = () => resolve(p.then(fn => fn(input)))
     input.click()
   })
 }
 
 export default showDirectoryPicker
+export { showDirectoryPicker }
