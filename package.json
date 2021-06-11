@@ -19,9 +19,6 @@
     "type": "git",
     "url": "git+https://github.com/jimmywarting/native-file-system-adapter.git"
   },
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com/@jimmywarting"
-  },
   "keywords": ["filesystem", "file", "blob", "stream", "fs", "read", "write", "delete", "file system access", "spec"],
   "author": "Jimmy Wärting",
   "license": "MIT",
