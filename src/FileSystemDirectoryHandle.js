@@ -41,9 +41,10 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
    * @param {boolean} [options.create] create the file if don't exist
    * @returns {Promise<FileSystemFileHandle>}
    */
-  async getFileHandle (name, options) {
+  async getFileHandle (name, options = {}) {
     if (name === '') throw new TypeError(`Name can't be an empty string.`)
     if (name === '.' || name === '..' || name.includes('/')) throw new TypeError(`Name contains invalid characters.`)
+    options.create = !!options.create
     return new FileSystemFileHandle(await this.#adapter.getFileHandle(name, options))
   }
 

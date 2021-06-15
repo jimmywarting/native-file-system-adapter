@@ -20,7 +20,7 @@ class FileSystemHandle {
     if (options.readable) return 'granted'
     const handle = this.#adapter
     return handle.queryPermission ?
-      handle.queryPermission(options) :
+      await handle.queryPermission(options) :
       handle.writable
         ? 'granted'
         : 'denied'
@@ -39,7 +39,7 @@ class FileSystemHandle {
    * @param {boolean} [options.recursive=false]
    */
   async remove (options = {}) {
-    this.#adapter.remove(options)
+    await this.#adapter.remove(options)
   }
 
   /**

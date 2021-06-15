@@ -2,7 +2,7 @@
 
 What is this?
 
-This is file system that follows [native-file-system](https://wicg.github.io/native-file-system/) specification. Thanks to it we can have a unified way of handling data in all browser and even in NodeJS in a more secure way.
+This is file system that follows [native-file-system](https://wicg.github.io/native-file-system/) specification. Thanks to it we can have a unified way of handling data in all browser and even in NodeJS & Deno in a more secure way.
 
 At a high level what we're providing is several bits:
 
@@ -63,6 +63,9 @@ handle = await getOriginPrivateDirectory(import('../src/adapters/cache.js'))
 handle = await getOriginPrivateDirectory(import('native-file-system-adapter/src/adapters/memory.js'))
 handle = await getOriginPrivateDirectory(import('native-file-system-adapter/src/adapters/node.js'), './starting-path')
 
+// Deno only variant:
+handle = await getOriginPrivateDirectory(import('native-file-system-adapter/src/adapters/memory.js'))
+handle = await getOriginPrivateDirectory(import('native-file-system-adapter/src/adapters/deno.js'), './starting-path')
 
 
 // The polyfilled (file input) version will turn into a memory adapter

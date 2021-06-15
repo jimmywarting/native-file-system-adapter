@@ -17,7 +17,7 @@ async function test(fs, step, root) {
 }
 
 async function start () {
-  const root = await getOriginPrivateDirectory(import('../src/adapters/node.js'), './testfolder')
+  const root = await getOriginPrivateDirectory(import('../src/adapters/deno.js'), './testfolder')
   const memory = await getOriginPrivateDirectory(import('../src/adapters/memory.js'))
 
   for (let step of steps) {
@@ -28,9 +28,9 @@ async function start () {
   console.log('\n\n\n')
   setTimeout(()=>{}, 222222)
 
-  for (let step of steps) {
-    await test('memory', step, memory).finally()
-  }
+  // for (let step of steps) {
+  //   await test('memory', step, memory).finally()
+  // }
 }
 
 start()
