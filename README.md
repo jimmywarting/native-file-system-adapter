@@ -14,7 +14,8 @@ At a high level what we're providing is several bits:
 
 This polyfill/ponyfill ships with a few backends built in:
 
-* `node`: Interact with filesystem using nodes `fs`
+* `node`: Interact with filesystem using NodeJS `fs`
+* `deno`: Interact with filesystem using Deno
 * `native`: Stores files the `Native Sandboxed` file file system storage
 * `Sandbox`: Stores files into the Blinks `Sandboxed FileSystem` API.
 * `IndexedDB`: Stores files into the browser's `IndexedDB` object database.
