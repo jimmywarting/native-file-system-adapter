@@ -14,7 +14,7 @@ if (globalThis.DataTransferItem && !DataTransferItem.prototype.getAsFileSystemHa
       import('./FileSystemDirectoryHandle.js'),
       import('./FileSystemFileHandle.js')
     ])
-    console.log('jo')
+
     return entry.isFile
       ? new FileSystemFileHandle(new FileHandle(entry, false))
       : new FileSystemDirectoryHandle(new FolderHandle(entry, false))

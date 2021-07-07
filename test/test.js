@@ -14,6 +14,11 @@ import {
   capture
 } from './util.js'
 
+if (!globalThis.WritableStream) {
+  const m = await import('https://cdn.jsdelivr.net/npm/web-streams-polyfill@3/dist/ponyfill.es2018.mjs')
+  globalThis.ReadableStream = m.ReadableStream
+}
+
 /** @type {typeof window.Blob} */
 const Blob = globalThis.Blob || await import('fetch-blob').then(m => m.Blob)
 

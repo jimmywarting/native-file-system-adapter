@@ -1,13 +1,15 @@
 import FileSystemHandle from './FileSystemHandle.js'
 import FileSystemWritableFileStream from './FileSystemWritableFileStream.js'
 
+const kAdapter = Symbol('adapter')
+
 class FileSystemFileHandle extends FileSystemHandle {
   /** @type {FileSystemFileHandle} */
-  #adapter
+  [kAdapter]
 
   constructor (adapter) {
     super(adapter)
-    this.#adapter = adapter
+    this[kAdapter] = adapter
   }
 
   /**
@@ -17,7 +19,7 @@ class FileSystemFileHandle extends FileSystemHandle {
    */
   async createWritable (options = {}) {
     return new FileSystemWritableFileStream(
-      await this.#adapter.createWritable(options)
+      await this[kAdapter].createWritable(options)
     )
   }
 
@@ -25,7 +27,7 @@ class FileSystemFileHandle extends FileSystemHandle {
    * @returns {Promise<File>}
    */
   getFile () {
-    return Promise.resolve(this.#adapter.getFile())
+    return Promise.resolve(this[kAdapter].getFile())
   }
 }
 

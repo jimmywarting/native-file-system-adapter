@@ -1,8 +1,8 @@
-const wm = new WeakMap()
+const kAdapter = Symbol('adapter')
 
 class FileSystemHandle {
   /** @type {FileSystemHandle} */
-  #adapter
+  [kAdapter]
 
   /** @type {string} */
   name
@@ -13,12 +13,12 @@ class FileSystemHandle {
   constructor (adapter) {
     this.kind = adapter.kind
     this.name = adapter.name
-    this.#adapter = adapter
+    this[kAdapter] = adapter
   }
 
   async queryPermission (options = {}) {
     if (options.readable) return 'granted'
-    const handle = this.#adapter
+    const handle = this[kAdapter]
     return handle.queryPermission ?
       await handle.queryPermission(options) :
       handle.writable
@@ -28,7 +28,7 @@ class FileSystemHandle {
 
   async requestPermission (options = {}) {
     if (options.readable) return 'granted'
-    const handle = this.#adapter
+    const handle = this[kAdapter]
     return handle.writable ? 'granted' : 'denied'
   }
 
@@ -39,7 +39,7 @@ class FileSystemHandle {
    * @param {boolean} [options.recursive=false]
    */
   async remove (options = {}) {
-    await this.#adapter.remove(options)
+    await this[kAdapter].remove(options)
   }
 
   /**
@@ -48,7 +48,7 @@ class FileSystemHandle {
   async isSameEntry (other) {
     if (this === other) return true
     if (this.kind !== other.kind) return false
-    return this.#adapter.isSameEntry(other.#adapter)
+    return this[kAdapter].isSameEntry(other[kAdapter])
   }
 }
 

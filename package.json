@@ -1,6 +1,6 @@
 {
   "name": "native-file-system-adapter",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Native File System API",
   "main": "src/es6.js",
   "module": "./src/es6.js",

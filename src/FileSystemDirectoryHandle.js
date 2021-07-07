@@ -1,13 +1,15 @@
 import FileSystemHandle from './FileSystemHandle.js'
 import FileSystemFileHandle from './FileSystemFileHandle.js'
 
+const kAdapter = Symbol('adapter')
+
 class FileSystemDirectoryHandle extends FileSystemHandle {
   /** @type {FileSystemDirectoryHandle} */
-  #adapter
+  [kAdapter]
 
   constructor (adapter) {
     super(adapter)
-    this.#adapter = adapter
+    this[kAdapter] = adapter
   }
 
   /**
@@ -19,19 +21,19 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
   async getDirectoryHandle (name, options = {}) {
     if (name === '') throw new TypeError(`Name can't be an empty string.`)
     if (name === '.' || name === '..' || name.includes('/')) throw new TypeError(`Name contains invalid characters.`)
-    return new FileSystemDirectoryHandle(await this.#adapter.getDirectoryHandle(name, options))
+    return new FileSystemDirectoryHandle(await this[kAdapter].getDirectoryHandle(name, options))
   }
 
   /** @returns {AsyncGenerator<[string, FileSystemHandle], void, unknown>} */
   async * entries () {
-    for await (const [_, entry] of this.#adapter.entries())
+    for await (const [_, entry] of this[kAdapter].entries())
       yield [entry.name, entry.kind === 'file' ? new FileSystemFileHandle(entry) : new FileSystemDirectoryHandle(entry)]
   }
 
   /** @deprecated use .entries() instead */
   async * getEntries() {
     console.warn('deprecated, use .entries() instead')
-    for await (let entry of this.#adapter.entries())
+    for await (let entry of this[kAdapter].entries())
       yield entry.kind === 'file' ? new FileSystemFileHandle(entry) : new FileSystemDirectoryHandle(entry)
   }
 
@@ -45,7 +47,7 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
     if (name === '') throw new TypeError(`Name can't be an empty string.`)
     if (name === '.' || name === '..' || name.includes('/')) throw new TypeError(`Name contains invalid characters.`)
     options.create = !!options.create
-    return new FileSystemFileHandle(await this.#adapter.getFileHandle(name, options))
+    return new FileSystemFileHandle(await this[kAdapter].getFileHandle(name, options))
   }
 
   /**
@@ -57,7 +59,7 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
     if (name === '') throw new TypeError(`Name can't be an empty string.`)
     if (name === '.' || name === '..' || name.includes('/')) throw new TypeError(`Name contains invalid characters.`)
     options.recursive = !!options.recursive // cuz node's fs.rm require boolean
-    return this.#adapter.removeEntry(name, options)
+    return this[kAdapter].removeEntry(name, options)
   }
 
   [Symbol.asyncIterator]() {
