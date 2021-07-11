@@ -25,12 +25,9 @@ async function start () {
     await test('server', step, root).finally()
   }
 
-  console.log('\n\n\n')
-  setTimeout(()=>{}, 222222)
-
-  // for (let step of steps) {
-  //   await test('memory', step, memory).finally()
-  // }
+  for (let step of steps) {
+    await test('memory', step, memory).finally()
+  }
 }
 
 start()
