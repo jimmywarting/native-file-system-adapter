@@ -124,7 +124,13 @@ form_showOpenFilePicker.onsubmit = evt => {
   const opts = Object.fromEntries([...new FormData(evt.target)])
   opts.types = JSON.parse(opts.types || '""')
   opts._preferPolyfill = !!opts._preferPolyfill
-  showOpenFilePicker(opts).then(console.log, console.error)
+  showOpenFilePicker(opts).then(handles => {
+    console.log(handles)
+    alert(handles)
+  }, err => {
+    console.error(err)
+    alert(err)
+  })
 }
 form_showSaveFilePicker.onsubmit = async evt => {
   evt.preventDefault()
