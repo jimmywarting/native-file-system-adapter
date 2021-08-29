@@ -1,5 +1,3 @@
-// @ts-check
-
 import { join, basename } from 'https://deno.land/std@0.98.0/path/mod.ts'
 import { errors } from '../util.js'
 
@@ -19,24 +17,35 @@ async function fileFrom (path) {
 export class Sink {
   /**
    * @param {Deno.File} fileHandle
+   * @param {string} path
    * @param {number} size
    */
-  constructor (fileHandle, size) {
+  constructor (fileHandle, path, size) {
     this.fileHandle = fileHandle
+    this.path = path
     this.size = size
     this.position = 0
   }
   async abort() {
-    await this.fileHandle.close()
+    this.fileHandle.close()
   }
   async write (chunk) {
+    try {
+      await Deno.stat(this.path)
+    } catch (err) {
+      if (err.name === 'NotFound') {
+        this.fileHandle.close()
+        throw new DOMException(...GONE)
+      }
+    }
+
     if (typeof chunk === 'object') {
       if (chunk.type === 'write') {
         if (Number.isInteger(chunk.position) && chunk.position >= 0) {
           this.position = chunk.position
         }
         if (!('data' in chunk)) {
-          await this.fileHandle.close()
+          this.fileHandle.close()
           throw new DOMException(...SYNTAX('write requires a data argument'))
         }
         chunk = chunk.data
@@ -48,7 +57,7 @@ export class Sink {
           this.position = chunk.position
           return
         } else {
-          await this.fileHandle.close()
+          this.fileHandle.close()
           throw new DOMException(...SYNTAX('seek requires a position argument'))
         }
       } else if (chunk.type === 'truncate') {
@@ -60,7 +69,7 @@ export class Sink {
           }
           return
         } else {
-          await this.fileHandle.close()
+          this.fileHandle.close()
           throw new DOMException(...SYNTAX('truncate requires a size argument'))
         }
       }
@@ -86,12 +95,24 @@ export class Sink {
   }
 
   async close () {
-    await this.fileHandle.close()
+    // First make sure the handle is closed
+    this.fileHandle.close()
+    try {
+      await Deno.stat(this.path)
+    } catch (err) {
+      if (err.name === 'NotFound') {
+        throw new DOMException(...GONE)
+      }
+    }
   }
 }
 
 export class FileHandle {
   #path
+  name
+  /** @readonly */
+  kind = 'file'
+  writable = true
 
   /**
    * @param {string} path
@@ -100,7 +121,6 @@ export class FileHandle {
   constructor (path, name) {
     this.#path = path
     this.name = name
-    this.kind = 'file'
   }
 
   async getFile () {
@@ -110,7 +130,7 @@ export class FileHandle {
     return fileFrom(this.#path)
   }
 
-  isSameEntry (other) {
+  async isSameEntry (other) {
     return this.#path === this.#getPath.apply(other)
   }
 
@@ -124,21 +144,24 @@ export class FileHandle {
       throw err
     })
     const { size } = await fileHandle.stat()
-    return new Sink(fileHandle, size)
+    return new Sink(fileHandle, this.#path, size)
   }
 }
 
 export class FolderHandle {
   #path = ''
+  name
+  /** @readonly */
+  kind = 'directory'
+  writable = true
 
   /** @param {string} path */
   constructor (path, name = '') {
     this.name = name
-    this.kind = 'directory'
     this.#path = join(path)
   }
 
-  isSameEntry (other) {
+  async isSameEntry (other) {
     return this.#path === this.#getPath.apply(other)
   }
 
@@ -146,6 +169,9 @@ export class FolderHandle {
     return this.#path
   }
 
+  /**
+   * @returns {AsyncGenerator<[string, FileHandle | FolderHandle], void, unknown>}
+   */
   async * entries () {
     const dir = this.#path
     try {
@@ -203,7 +229,10 @@ export class FolderHandle {
     return new FileHandle(path, name)
   }
 
-  queryPermission () {
+  /**
+   * @returns {Promise<PermissionState>}
+   */
+  async queryPermission () {
     return 'granted'
   }
 
@@ -235,4 +264,5 @@ export class FolderHandle {
   }
 }
 
+/** @type import('../interfaces.js').Adapter<string> */
 export default path => new FolderHandle(join(Deno.cwd(), path))

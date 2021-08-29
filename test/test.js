@@ -1,5 +1,3 @@
-import * as fs from '../src/es6.js'
-import FileSystemDirectoryHandle from '../src/FileSystemDirectoryHandle.js'
 import {
   streamFromFetch,
   arrayEqual,
@@ -14,15 +12,9 @@ import {
   capture
 } from './util.js'
 
-if (!globalThis.WritableStream) {
-  const m = await import('https://cdn.jsdelivr.net/npm/web-streams-polyfill@3/dist/ponyfill.es2018.mjs')
-  globalThis.ReadableStream = m.ReadableStream
-}
+const arr = [];
 
-/** @type {typeof window.Blob} */
-const Blob = globalThis.Blob || await import('fetch-blob').then(m => m.Blob)
-
-const arr = []
+(async () => {
 
 /**
  * @param {string} desc
@@ -35,7 +27,7 @@ let err
 let handle
 let existing_handle
 let subDir
-/** @type {fs.FileSystemWritableFileStream} */
+/** @type {import('../src/FileSystemWritableFileStream').FileSystemWritableFileStream} */
 let wfs
 let file_name
 let body
@@ -280,6 +272,40 @@ t('getFile() returns last modified time', async root => {
   assert(first_mtime < second_mtime)
 })
 
+t('resolve() returns relative path as array for existing dir descendant', async root => {
+  const first_subDir_name = 'first-subdir-name'
+  const first_subDir = await createDirectory(first_subDir_name, root)
+  const second_subDir_name = 'second-subdir-name'
+  const second_subDir = await createDirectory(second_subDir_name, first_subDir)
+  const resolvedPath = await root.resolve(second_subDir)
+  arrayEqual(resolvedPath, [first_subDir_name, second_subDir_name])
+})
+
+t('resolve() returns relative path as array for existing file descendant', async root => {
+  const subDirName = 'subdir-name'
+  const subdir = await createDirectory(subDirName, root)
+  const fileName = 'empty-file.txt'
+  const emptyFile = await createEmptyFile(fileName, subdir)
+  const resolvedPath = await root.resolve(emptyFile)
+  arrayEqual(resolvedPath, [subDirName, fileName])
+})
+
+t('resolve() returns empty array when itself passed as arg', async root => {
+  const first_subDir_name = 'first-subdir-name'
+  const first_subDir = await createDirectory(first_subDir_name, root)
+  const resolvedPath = await first_subDir.resolve(first_subDir)
+  arrayEqual(resolvedPath, [])
+})
+
+t('resolve() returns null for non-existing descendant', async root => {
+  const first_subDir_name = 'first-subdir-name'
+  const first_subDir = await createDirectory(first_subDir_name, root)
+  const second_subDir_name = 'second-subdir-name'
+  const second_subDir = await createDirectory(second_subDir_name, root)
+  const resolvedPath = await first_subDir.resolve(second_subDir)
+  arrayEqual(resolvedPath, null)
+})
+
 t('can be piped to with a string', async root => {
   handle = await createEmptyFile('foo_string.txt', root)
   wfs = await handle.createWritable()
@@ -377,21 +403,23 @@ t('plays well with fetch', async root => {
   assert(await getFileSize(handle) === 16)
 })
 
-t('abort() aborts write', async root => {
-  handle = await createEmptyFile('aborted should_be_empty.txt', root)
-  wfs = await handle.createWritable()
-  body = streamFromFetch('fetched from far')
-  const abortController = new AbortController()
-  const signal = abortController.signal
-  abortController.abort()
-  const promise = new ReadableStream().pipeTo(wfs, { signal })
-  err = await capture(promise)
-  assert(err.name === 'AbortError')
-  err = await capture(wfs.close())
-  assert(err instanceof TypeError)
-  assert(await getFileContents(handle) === '')
-  assert(await getFileSize(handle) === 0)
-})
+if (globalThis.AbortController) {
+  t('abort() aborts write', async root => {
+    handle = await createEmptyFile('aborted should_be_empty.txt', root)
+    wfs = await handle.createWritable()
+    body = streamFromFetch('fetched from far')
+    const abortController = new AbortController()
+    const signal = abortController.signal
+    abortController.abort()
+    const promise = new ReadableStream().pipeTo(wfs, { signal })
+    err = await capture(promise)
+    assert(err.name === 'AbortError')
+    err = await capture(wfs.close())
+    assert(err instanceof TypeError)
+    assert(await getFileContents(handle) === '')
+    assert(await getFileSize(handle) === 0)
+  })
+}
 
 t('write() with an empty blob to an empty file', async root => {
   handle = await createEmptyFile('empty_blob', root)
@@ -714,44 +742,42 @@ t('createWritable() fails when parent directory is removed', async root => {
 })
 
 t('write() fails when parent directory is removed', async root => {
-  // TODO: fix me
-  // dir = await createDirectory('parent_dir', root)
-  // handle = await createEmptyFile('write_fails_when_dir_removed.txt', dir)
-  // wfs = await handle.createWritable()
-  // await root.removeEntry('parent_dir', { recursive: true })
-  // err = await wfs.write('foo').catch(e=>e)
-  // assert(err?.name === 'NotFoundError', 'write() fails when parent directory is removed')
+  dir = await createDirectory('parent_dir', root)
+  handle = await createEmptyFile('write_fails_when_dir_removed.txt', dir)
+  wfs = await handle.createWritable()
+  await root.removeEntry('parent_dir', { recursive: true })
+  err = await wfs.write('foo').catch(e=>e)
+  assert(err && err.name === 'NotFoundError', 'write() fails when parent directory is removed')
 })
 
 t('truncate() fails when parent directory is removed', async root => {
-  // TODO: fix me
-  // dir = await createDirectory('parent_dir', root)
-  // file_name = 'truncate_fails_when_dir_removed.txt'
-  // handle = await createEmptyFile(file_name, dir)
-  // wfs = await handle.createWritable()
-  // await root.removeEntry('parent_dir', { recursive: true })
-  // err = await wfs.truncate(0).catch(e=>e)
-  // assert(err?.name === 'NotFoundError', 'truncate() fails when parent directory is removed')
+  dir = await createDirectory('parent_dir', root)
+  file_name = 'truncate_fails_when_dir_removed.txt'
+  handle = await createEmptyFile(file_name, dir)
+  wfs = await handle.createWritable()
+  await root.removeEntry('parent_dir', { recursive: true })
+  err = await wfs.truncate(0).catch(e=>e)
+  assert(err && err.name === 'NotFoundError', 'truncate() fails when parent directory is removed')
 })
 
 t('createWritable({keepExistingData: true}): atomic writable file stream initialized with source contents', async root => {
   handle = await createFileWithContents('atomic_file_is_copied.txt', 'fooks', root)
   wfs = await handle.createWritable({ keepExistingData: true })
   await wfs.write('bar')
+  assert(await getFileContents(handle) === 'fooks')
   await wfs.close()
   assert(await getFileContents(handle) === 'barks')
   assert(await getFileSize(handle) === 5)
 })
 
 t('createWritable({keepExistingData: false}): atomic writable file stream initialized with empty file', async root => {
-  // TODO: fix me
-  // handle = await createFileWithContents('atomic_file_is_not_copied.txt', 'very long string', root)
-  // wfs = await handle.createWritable({ keepExistingData: false })
-  // await wfs.write('bar')
-  // assert(await getFileContents(handle) === 'very long string')
-  // await wfs.close()
-  // assert(await getFileContents(handle) === 'bar')
-  // assert(await getFileSize(handle) === 3)
+  handle = await createFileWithContents('atomic_file_is_not_copied.txt', 'very long string', root)
+  wfs = await handle.createWritable({ keepExistingData: false })
+  await wfs.write('bar')
+  assert(await getFileContents(handle) === 'very long string')
+  await wfs.close()
+  assert(await getFileContents(handle) === 'bar')
+  assert(await getFileSize(handle) === 3)
 })
 
 t('cursor position: truncate size > offset', async root => {
@@ -789,20 +815,12 @@ t('commands are queued', async root => {
   assert(await getFileSize(handle) === 9)
 })
 
-t('queryPermission(writable=false) returns granted', async root => {
-  assert(await root.queryPermission({ writable: false }) === 'granted')
+t('queryPermission({ mode: read }) returns granted', async root => {
+  assert(await root.queryPermission({ mode: 'read' }) === 'granted')
 })
 
-t('queryPermission(writable=true) returns granted', async root => {
-  assert(await root.queryPermission({ writable: false }) === 'granted')
-})
-
-t('queryPermission(readable=true) returns granted', async root => {
-  assert(await root.queryPermission({ writable: false }) === 'granted')
-})
-
-t('queryPermission(readable=false) returns granted', async root => {
-  assert(await root.queryPermission({ writable: false }) === 'granted')
+t('queryPermission({ mode: readwrite }) returns granted', async root => {
+  assert(await root.queryPermission({ mode: 'readwrite' }) === 'granted')
 })
 
 t('isSameEntry for identical directory handles returns true', async root => {
@@ -870,5 +888,7 @@ t('Large real data test', async root => {
   console.log('done downloading to fs')
   return pump()
 })
+
+})()
 
 export default arr

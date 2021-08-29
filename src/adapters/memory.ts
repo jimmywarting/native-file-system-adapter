@@ -1,25 +1,42 @@
-import { errors } from '../util.js'
-/** @type {typeof window.File} */
-const File = globalThis.File || await import('fetch-blob/file.js').then(m => m.File)
-/** @type {typeof window.Blob} */
-const Blob = globalThis.Blob || await import('fetch-blob').then(m => m.Blob)
+import { Adapter, FileSystemFileHandleAdapter, FileSystemFolderHandleAdapter, WriteChunk } from '../interfaces.js'
+import { errors, isChunkObject } from '../util.js'
 
-const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX, SECURITY, DISALLOWED } = errors
+let File = globalThis.File
+let Blob = globalThis.Blob
 
-export class Sink {
-  /** @param {FileHandle} fileHandle */
-  constructor (fileHandle) {
+/** @internal */
+export const setFileImpl = (fileCtor: typeof globalThis.File) => {
+  File = fileCtor
+}
+
+/** @internal */
+export const setBlobImpl = (blobCtor: typeof globalThis.Blob) => {
+  Blob = blobCtor
+}
+
+const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX, DISALLOWED } = errors
+
+class Sink implements UnderlyingSink<WriteChunk> {
+  private fileHandle: FileHandle
+  private file: File
+  private size: number
+  private position: number
+
+  constructor (fileHandle: FileHandle, keepExistingData: boolean) {
     this.fileHandle = fileHandle
-    this.file = fileHandle.file
-    this.size = fileHandle.file.size
+    this.file = keepExistingData ? fileHandle.file! : new File([], fileHandle.file!.name, fileHandle.file!)
+    this.size = keepExistingData ? fileHandle.file!.size : 0
     this.position = 0
   }
-  write (chunk) {
+
+  async write (chunk: WriteChunk) {
+    if (!this.fileHandle.file) throw new DOMException(...GONE)
+
     let file = this.file
 
-    if (typeof chunk === 'object') {
+    if (isChunkObject(chunk)) {
       if (chunk.type === 'write') {
-        if (Number.isInteger(chunk.position) && chunk.position >= 0) {
+        if (typeof chunk.position === 'number' && chunk.position >= 0) {
           this.position = chunk.position
           if (this.size < chunk.position) {
             this.file = new File(
@@ -47,7 +64,7 @@ export class Sink {
         if (Number.isInteger(chunk.size) && chunk.size >= 0) {
           file = chunk.size < this.size
             ? new File([file.slice(0, chunk.size)], file.name, file)
-            : new File([file, new Uint8Array(chunk.size - this.size)], file.name)
+            : new File([file, new Uint8Array(chunk.size - this.size)], file.name, file)
 
           this.size = file.size
           if (this.position > file.size) {
@@ -85,40 +102,46 @@ export class Sink {
 
     this.file = blob
   }
-  close () {
-    if (this.fileHandle.deleted) throw new DOMException(...GONE)
+
+  async close () {
+    if (!this.fileHandle.file) throw new DOMException(...GONE)
     this.fileHandle.file = this.file
     this.file =
     this.position =
-    this.size = null
+    this.size = null!
     if (this.fileHandle.onclose) {
       this.fileHandle.onclose(this.fileHandle)
     }
   }
 }
 
-export class FileHandle {
+export class FileHandle implements FileSystemFileHandleAdapter {
+  public file: File | null
+  public readonly name: string
+  public readonly kind = 'file'
+  // TODO: check if we need this, b/c we can check file for null instead
+  private deleted = false
+  public writable: boolean
+  public onclose?(self: this): void
+
   constructor (name = '', file = new File([], name), writable = true) {
     this.file = file
     this.name = name
-    this.kind = 'file'
-    this.deleted = false
     this.writable = writable
-    this.readable = true
   }
 
-  getFile () {
-    if (this.deleted) throw new DOMException(...GONE)
+  async getFile () {
+    if (this.deleted || this.file === null) throw new DOMException(...GONE)
     return this.file
   }
 
-  createWritable (opts) {
+  async createWritable (opts?: FileSystemCreateWritableOptions) {
     if (!this.writable) throw new DOMException(...DISALLOWED)
     if (this.deleted) throw new DOMException(...GONE)
-    return new Sink(this)
+    return new Sink(this, !!opts?.keepExistingData)
   }
 
-  isSameEntry (other) {
+  async isSameEntry (other: FileHandle) {
     return this === other
   }
 
@@ -128,17 +151,16 @@ export class FileHandle {
   }
 }
 
-export class FolderHandle {
+export class FolderHandle implements FileSystemFolderHandleAdapter {
+  public readonly name: string
+  public readonly kind = 'directory'
+  private deleted = false
+  public _entries: Record<string, FolderHandle | FileHandle> = {}
+  public writable: boolean
 
-  /** @param {string} name */
-  constructor (name, writable = true) {
+  constructor (name: string, writable = true) {
     this.name = name
-    this.kind = 'directory'
-    this.deleted = false
-    /** @type {Object.<string, (FolderHandle|FileHandle)>} */
-    this._entries = {}
     this.writable = writable
-    this.readable = true
   }
 
   async * entries () {
@@ -146,12 +168,11 @@ export class FolderHandle {
     yield* Object.entries(this._entries)
   }
 
-  isSameEntry (other) {
+  async isSameEntry (other: FolderHandle) {
     return this === other
   }
 
-  /** @param {string} name */
-  getDirectoryHandle (name, opts = {}) {
+  async getDirectoryHandle (name: string, opts: { create?: boolean; } = {}) {
     if (this.deleted) throw new DOMException(...GONE)
     const entry = this._entries[name]
     if (entry) { // entry exist
@@ -169,26 +190,31 @@ export class FolderHandle {
     }
   }
 
-  /** @param {string} name */
-  getFileHandle (name, opts = {}) {
+  async getFileHandle (name: string, opts: { create?: boolean; } = {}) {
     const entry = this._entries[name]
-    const isFile = entry instanceof FileHandle
-    if (entry && isFile) return entry
-    if (entry && !isFile) throw new DOMException(...MISMATCH)
-    if (!entry && !opts.create) throw new DOMException(...GONE)
-    if (!entry && opts.create) {
-      return (this._entries[name] = new FileHandle(name))
+    if (entry) {
+      if (entry instanceof FileHandle) {
+        return entry
+      } else {
+        throw new DOMException(...MISMATCH)
+      }
+    } else {
+      if (!opts.create) {
+        throw new DOMException(...GONE)
+      } else {
+        return (this._entries[name] = new FileHandle(name))
+      }
     }
   }
 
-  removeEntry (name, opts) {
+  async removeEntry (name: string, opts: { recursive?: boolean; } = {}) {
     const entry = this._entries[name]
     if (!entry) throw new DOMException(...GONE)
     entry.destroy(opts.recursive)
     delete this._entries[name]
   }
 
-  destroy (recursive) {
+  destroy (recursive?: boolean) {
     for (let x of Object.values(this._entries)) {
       if (!recursive) throw new DOMException(...MOD_ERR)
       x.destroy(recursive)
@@ -200,4 +226,6 @@ export class FolderHandle {
 
 const fs = new FolderHandle('')
 
-export default opts => fs
+const adapter: Adapter<void> = () => fs
+
+export default adapter

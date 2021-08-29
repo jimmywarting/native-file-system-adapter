@@ -1,28 +1,41 @@
 /* global indexedDB, Blob, File, DOMException */
 
-import { errors } from '../util.js'
+import { Adapter, FileSystemFileHandleAdapter, FileSystemFolderHandleAdapter, WriteChunk } from '../interfaces.js'
+import { errors, isChunkObject } from '../util.js'
 
 const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX } = errors
 
-class Sink {
-  /**
-   * @param {IDBDatabase} db
-   * @param {IDBValidKey} id
-   * @param {number} size
-   * @param {File} file
-   */
-  constructor (db, id, size, file) {
+class Sink implements UnderlyingSink<WriteChunk> {
+  private db: IDBDatabase
+  private id: IDBValidKey
+  private size: number
+  private file: File
+  private position = 0
+
+  constructor (db: IDBDatabase, id: IDBValidKey, size: number, file: File) {
     this.db = db
     this.id = id
     this.size = size
-    this.position = 0
     this.file = file
   }
 
-  write (chunk) {
-    if (typeof chunk === 'object') {
+  async write (chunk: WriteChunk) {
+    // Ensure file still exists before writing
+    await new Promise<void>((resolve, reject) => {
+      const [tx, table] = store(this.db)
+      table.get(this.id).onsuccess = (evt) => {
+        (evt.target as IDBRequest).result
+          ? table.get(this.id)
+          : reject(new DOMException(...GONE))
+      }
+      tx.oncomplete = () => resolve()
+      tx.onabort = reject
+      tx.onerror = reject
+    })
+
+    if (isChunkObject(chunk)) {
       if (chunk.type === 'write') {
-        if (Number.isInteger(chunk.position) && chunk.position >= 0) {
+        if (typeof chunk.position === 'number' && chunk.position >= 0) {
           if (this.size < chunk.position) {
             this.file = new File(
               [this.file, new ArrayBuffer(chunk.position - this.size)],
@@ -89,139 +102,156 @@ class Sink {
   }
 
   close () {
-    return new Promise((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       const [tx, table] = store(this.db)
       table.get(this.id).onsuccess = (evt) => {
-        evt.target.result
+        (evt.target as IDBRequest).result
           ? table.put(this.file, this.id)
           : reject(new DOMException(...GONE))
       }
       tx.oncomplete = () => resolve()
+      tx.onabort = reject
+      tx.onerror = reject
     })
   }
 }
 
-class FileHandle {
-  /**
-   * @param {IDBDatabase} db
-   * @param {IDBValidKey} id
-   * @param {string} name
-   */
-  constructor (db, id, name) {
+class FileHandle implements FileSystemFileHandleAdapter {
+  readonly kind = 'file'
+  readonly name: string
+  private _db: IDBDatabase
+  private _id: IDBValidKey
+  writable = true
+  readable = true
+
+  constructor (db: IDBDatabase, id: IDBValidKey, name: string) {
     this._db = db
     this._id = id
     this.name = name
-    this.kind = 'file'
-    this.readable = true
-    this.writable = true
   }
 
-  /** @param {FileHandle} other */
-  isSameEntry (other) {
+  async isSameEntry (other: FileHandle) {
     return this._id === other._id
   }
 
   async getFile () {
-    /** @type {File} */
-    const file = await new Promise(resolve => {
-      store(this._db)[1].get(this._id).onsuccess = evt => resolve(evt.target.result)
+    const file = await new Promise<File>((resolve, reject) => {
+      const req = store(this._db)[1].get(this._id)
+      req.onsuccess = evt => resolve((evt.target as IDBRequest).result)
+      req.onerror = evt => reject((evt.target as IDBRequest).error)
     })
     if (!file) throw new DOMException(...GONE)
     return file
   }
 
-  async createWritable (opts) {
-    const file = await this.getFile()
+  async createWritable (opts: FileSystemCreateWritableOptions) {
+    let file = await this.getFile()
+    if (!opts.keepExistingData) {
+      file = new File([], file.name, file)
+    }
     return new Sink(this._db, this._id, file.size, file)
   }
 }
 
-/**
- * @param {IDBDatabase} db
- * @returns {[IDBTransaction, IDBObjectStore]}
- */
-function store (db) {
+function store (db: IDBDatabase): [IDBTransaction, IDBObjectStore] {
+  // @ts-ignore
   const tx = db.transaction('entries', 'readwrite', { durability: 'relaxed' })
   return [tx, tx.objectStore('entries')]
 }
 
-function rimraf (evt, toDelete, recursive = true) {
-  const { source, result } = evt.target
+function rimraf (
+  store: IDBObjectStore,
+  result: Record<string, [id: IDBValidKey, isFile: boolean]>,
+  toDelete?: Record<string, [id: IDBValidKey, isFile: boolean]>,
+  recursive = true
+) {
   for (const [id, isFile] of Object.values(toDelete || result)) {
-    if (isFile) source.delete(id)
+    if (isFile) store.delete(id)
     else if (recursive) {
-      source.get(id).onsuccess = rimraf
-      source.delete(id)
+      store.get(id).onsuccess = (evt) => rimraf(store, (evt.target as IDBRequest).result)
+      store.delete(id)
     } else {
-      source.get(id).onsuccess = (evt) => {
-        if (Object.keys(evt.target.result).length !== 0) {
-          evt.target.transaction.abort()
+      store.get(id).onsuccess = (evt) => {
+        if (Object.keys((evt.target as IDBRequest).result).length !== 0) {
+          (evt.target as IDBRequest).transaction!.abort()
         } else {
-          source.delete(id)
+          store.delete(id)
         }
       }
     }
   }
 }
 
-class FolderHandle {
-  /**
-   * @param {IDBDatabase} db
-   * @param {IDBValidKey} id
-   * @param {string} name
-   */
-  constructor (db, id, name) {
+type Entries = Record<string, [id: string, isFile: boolean]>
+
+class FolderHandle implements FileSystemFolderHandleAdapter {
+  readonly kind = 'directory'
+  readonly name: string
+  private _db: IDBDatabase
+  private _id: IDBValidKey
+  writable = true
+  readable = true
+
+  constructor (db: IDBDatabase, id: IDBValidKey, name: string) {
     this._db = db
     this._id = id
-    this.kind = 'directory'
     this.name = name
-    this.readable = true
-    this.writable = true
   }
 
   async * entries () {
-    const entries = await new Promise(resolve => {
-      store(this._db)[1].get(this._id).onsuccess = evt => resolve(evt.target.result)
+    const entries = await new Promise<Entries>((resolve, reject) => {
+      const getReq = store(this._db)[1].get(this._id)
+      getReq.onsuccess = evt => resolve((evt.target as IDBRequest).result)
+      getReq.onerror = evt => reject((evt.target as IDBRequest).error)
     })
     if (!entries) throw new DOMException(...GONE)
     for (const [name, [id, isFile]] of Object.entries(entries)) {
       yield [name, isFile
         ? new FileHandle(this._db, id, name)
         : new FolderHandle(this._db, id, name)
-      ]
+      ] as [string, FileHandle | FolderHandle]
     }
   }
 
-  /** @param {FolderHandle} other  */
-  isSameEntry (other) {
+  async isSameEntry (other: FolderHandle) {
     return this._id === other._id
   }
 
-  getDirectoryHandle (name, opts = {}) {
-    return new Promise((resolve, reject) => {
+  getDirectoryHandle (name: string, opts: FileSystemGetDirectoryOptions = {}) {
+    return new Promise<FolderHandle>((resolve, reject) => {
       const table = store(this._db)[1]
       const req = table.get(this._id)
       req.onsuccess = () => {
         const entries = req.result
         const entry = entries[name]
-        entry // entry exist
-          ? entry[1] // isFile?
-              ? reject(new DOMException(...MISMATCH))
-              : resolve(new FolderHandle(this._db, entry[0], name))
-          : opts.create
-            ? table.add({}).onsuccess = evt => {
-                const id = evt.target.result
-                entries[name] = [id, false]
-                table.put(entries, this._id)
-                  .onsuccess = () => resolve(new FolderHandle(this._db, id, name))
-              }
-            : reject(new DOMException(...GONE))
+        if (entry) {
+          entry[1] // isFile?
+            ? reject(new DOMException(...MISMATCH))
+            : resolve(new FolderHandle(this._db, entry[0], name))
+        } else {
+          if (opts.create) {
+            const addReq = table.add({})
+            addReq.onsuccess = evt => {
+              const id = (evt.target as IDBRequest).result
+              entries[name] = [id, false]
+              const putReq = table.put(entries, this._id)
+              putReq.onsuccess = () => resolve(new FolderHandle(this._db, id, name))
+              putReq.onerror = evt => reject((evt.target as IDBRequest).error)
+            }
+            addReq.onerror = evt => reject((evt.target as IDBRequest).error)
+          } else {
+            reject(new DOMException(...GONE))
+          }
+        }
+      }
+      req.onerror = evt => {
+        reject((evt.target as IDBRequest).error)
       }
     })
   }
 
-  getFileHandle (name, opts = {}) {
-    return new Promise((resolve, reject) => {
+  getFileHandle (name: string, opts: FileSystemGetFileOptions = {}) {
+    return new Promise<FileHandle>((resolve, reject) => {
       const table = store(this._db)[1]
       const query = table.get(this._id)
       query.onsuccess = () => {
@@ -239,14 +269,17 @@ class FolderHandle {
             query.onsuccess = () => {
               resolve(new FileHandle(this._db, id, name))
             }
+            query.onerror = evt => reject((evt.target as IDBRequest).error)
           }
+          q.onerror = evt => reject((evt.target as IDBRequest).error)
         }
       }
+      query.onerror = evt => reject((evt.target as IDBRequest).error)
     })
   }
 
-  async removeEntry (name, opts) {
-    return new Promise((resolve, reject) => {
+  async removeEntry (name: string, opts: FileSystemRemoveOptions) {
+    return new Promise<void>((resolve, reject) => {
       const [tx, table] = store(this._db)
       const cwdQ = table.get(this._id)
       cwdQ.onsuccess = (evt) => {
@@ -257,9 +290,9 @@ class FolderHandle {
         }
         delete cwd[name]
         table.put(cwd, this._id)
-        rimraf(evt, toDelete, !!opts.recursive)
+        rimraf((evt.target as IDBRequest).source as IDBObjectStore, (evt.target as IDBRequest).result, toDelete, !!opts.recursive)
       }
-      tx.oncomplete = resolve
+      tx.oncomplete = () => resolve()
       tx.onerror = reject
       tx.onabort = () => {
         reject(new DOMException(...MOD_ERR))
@@ -268,7 +301,7 @@ class FolderHandle {
   }
 }
 
-export default (opts = { persistent: false }) => new Promise((resolve) => {
+const adapter: Adapter<void> = () => new Promise((resolve, reject) => {
   const request = indexedDB.open('fileSystem')
 
   request.onupgradeneeded = () => {
@@ -281,4 +314,10 @@ export default (opts = { persistent: false }) => new Promise((resolve) => {
   request.onsuccess = () => {
     resolve(new FolderHandle(request.result, 1, ''))
   }
+
+  request.onerror = (ev) => {
+    reject((ev.target as IDBOpenDBRequest).error)
+  }
 })
+
+export default adapter

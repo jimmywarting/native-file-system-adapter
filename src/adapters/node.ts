@@ -1,27 +1,45 @@
 import fs from 'fs/promises'
-import { errors } from '../util.js'
+import { errors, isChunkObject } from '../util.js'
 import { join } from 'path'
 import Blob from 'fetch-blob'
 import { fileFrom } from 'fetch-blob/from.js'
+import { Adapter, FileSystemFileHandleAdapter, FileSystemFolderHandleAdapter, WriteChunk } from '../interfaces.js'
 import DOMException from 'node-domexception'
 
 // import mime from 'mime-types'
 
 const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX } = errors
 
-export class Sink {
-  constructor (fileHandle, size) {
+export class Sink implements UnderlyingSink<WriteChunk> {
+  private fileHandle: fs.FileHandle
+  private size: number
+  private path: string
+  private position = 0
+
+  constructor (fileHandle: fs.FileHandle, path: string, size: number) {
     this.fileHandle = fileHandle
+    this.path = path
     this.size = size
     this.position = 0
   }
+
   async abort() {
     await this.fileHandle.close()
   }
-  async write (chunk) {
-    if (typeof chunk === 'object') {
+
+  async write (chunk: WriteChunk) {
+    try {
+      await fs.stat(this.path)
+    } catch(err) {
+      if (err.code === 'ENOENT') {
+        await this.fileHandle.close().catch()
+        throw new DOMException(...GONE)
+      }
+    }
+
+    if (isChunkObject(chunk)) {
       if (chunk.type === 'write') {
-        if (Number.isInteger(chunk.position) && chunk.position >= 0) {
+        if (typeof chunk.position === 'number' && chunk.position >= 0) {
           this.position = chunk.position
         }
         if (!('data' in chunk)) {
@@ -60,7 +78,7 @@ export class Sink {
     } else if (typeof chunk === 'string') {
       chunk = Buffer.from(chunk)
     } else if (chunk instanceof Blob) {
-      for await (const data of chunk.stream()) {
+      for await (const data of (chunk as Blob).stream()) {
         const res = await this.fileHandle.writev([data], this.position)
         this.position += res.bytesWritten
         this.size += res.bytesWritten
@@ -68,37 +86,39 @@ export class Sink {
       return
     }
 
-    const res = await this.fileHandle.writev([chunk], this.position)
+    const res = await this.fileHandle.writev([chunk as Uint8Array | DataView], this.position)
     this.position += res.bytesWritten
     this.size += res.bytesWritten
   }
 
   async close () {
+    // First make sure we close the handle
     await this.fileHandle.close()
+    await fs.stat(this.path).catch(err => {
+      if (err.code === 'ENOENT') throw new DOMException(...GONE)
+    })
   }
 }
 
-export class FileHandle {
-  _path
+export class FileHandle implements FileSystemFileHandleAdapter {
+  readonly kind = 'file'
+  readonly name: string
+  private _path: string
+  writable = true
 
-  /**
-   * @param {string} path
-   * @param {string} name
-   */
-  constructor (path, name) {
+  constructor (path: string, name: string) {
     this._path = path
     this.name = name
-    this.kind = 'file'
   }
 
   async getFile () {
     await fs.stat(this._path).catch(err => {
       if (err.code === 'ENOENT') throw new DOMException(...GONE)
     })
-    return fileFrom(this._path)
+    return (await fileFrom(this._path)) as any as globalThis.File
   }
 
-  isSameEntry (other) {
+  async isSameEntry (other: FileHandle) {
     return this._path === this.#getPath.apply(other)
   }
 
@@ -112,21 +132,22 @@ export class FileHandle {
       throw err
     })
     const { size } = await fileHandle.stat()
-    return new Sink(fileHandle, size)
+    return new Sink(fileHandle, this._path, size)
   }
 }
 
-export class FolderHandle {
-  _path = ''
+export class FolderHandle implements FileSystemFolderHandleAdapter {
+  readonly kind = 'directory'
+  readonly name: string
+  private _path: string
+  writable = true
 
-  /** @param {string} path */
-  constructor (path, name = '') {
+  constructor (path = '', name = '') {
     this.name = name
-    this.kind = 'directory'
     this._path = path
   }
 
-  isSameEntry (other) {
+  async isSameEntry (other: FolderHandle) {
     return this._path === other._path
   }
 
@@ -140,14 +161,14 @@ export class FolderHandle {
       const path = join(dir, name)
       const stat = await fs.lstat(path)
       if (stat.isFile()) {
-        yield [name, new FileHandle(path, name)]
+        yield [name, new FileHandle(path, name)] as [string, FileHandle]
       } else if (stat.isDirectory()) {
-        yield [name, new FolderHandle(path, name)]
+        yield [name, new FolderHandle(path, name)] as [string, FolderHandle]
       }
     }
   }
 
-  async getDirectoryHandle (name, opts = {}) {
+  async getDirectoryHandle (name: string, opts: FileSystemGetDirectoryOptions = {}) {
     const path = join(this._path, name)
     const stat = await fs.lstat(path).catch(err => {
       if (err.code !== 'ENOENT') throw err
@@ -160,7 +181,7 @@ export class FolderHandle {
     return new FolderHandle(path, name)
   }
 
-  async getFileHandle (name, opts = {}) {
+  async getFileHandle (name: string, opts: FileSystemGetFileOptions = {}) {
     const path = join(this._path, name)
     const stat = await fs.lstat(path).catch(err => {
       if (err.code !== 'ENOENT') throw err
@@ -174,14 +195,10 @@ export class FolderHandle {
   }
 
   async queryPermission () {
-    return 'granted'
+    return 'granted' as PermissionState
   }
 
-  /**
-   * @param {string} name
-   * @param {{ recursive: boolean; }} opts
-   */
-  async removeEntry (name, opts) {
+  async removeEntry (name: string, opts: FileSystemRemoveOptions) {
     const path = join(this._path, name)
     const stat = await fs.lstat(path).catch(err => {
       if (err.code === 'ENOENT') throw new DOMException(...GONE)
@@ -205,4 +222,5 @@ export class FolderHandle {
   }
 }
 
-export default path => new FolderHandle(path)
+const adapter: Adapter<string> = path => new FolderHandle(path)
+export default adapter

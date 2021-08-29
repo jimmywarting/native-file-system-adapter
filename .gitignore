@@ -105,3 +105,6 @@ dist
 
 .idea
 .history
+
+/lib
+/test/testfolder

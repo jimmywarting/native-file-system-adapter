@@ -1,19 +1,23 @@
-import * as fs from '../src/es6.js'
+import { ReadableStream } from '../lib/web-streams-ponyfill.js'
+
 import tests from '../test/test.js'
 import {
   cleanupSandboxedFileSystem,
   getDirectoryEntryCount,
   assert
 } from '../test/util.js'
-
-const {
+import {
   showDirectoryPicker,
   showOpenFilePicker,
   showSaveFilePicker,
   getOriginPrivateDirectory
-} = fs
+} from '../lib/es2018.js'
+import '../lib/polyfillDataTransferItem.js'
 
-globalThis.fs = fs
+if (!globalThis.WritableStream) {
+  // Tests use ReadableStream.pipeTo() which is only defined if WriteableStream is supported
+  globalThis.ReadableStream = ReadableStream
+}
 
 if (!Blob.prototype.text) {
   Blob.prototype.text = function () {
@@ -93,27 +97,27 @@ $types1.value = JSON.stringify([
   {
     description: 'Text Files',
     accept: {
-      'text/plain': ['txt', 'text'],
-      'text/html': ['html', 'htm']
+      'text/plain': ['.txt', '.text'],
+      'text/html': ['.html', '.htm']
     }
   },
   {
     description: 'Images',
     accept: {
-      'image/*': ['png', 'gif', 'jpeg', 'jpg']
+      'image/*': ['.png', '.gif', '.jpeg', '.jpg']
     }
   }
 ], null, 2)
 
 $types2.value = JSON.stringify([
   {
-    accept: { 'image/jpg': ['jpg'] }
+    accept: { 'image/jpg': ['.jpg'] }
   },
   {
-    accept: { 'image/png': ['png'] }
+    accept: { 'image/png': ['.png'] }
   },
   {
-    accept: { 'image/webp': ['webp'] }
+    accept: { 'image/webp': ['.webp'] }
   }
 ], null, 2)
 
@@ -130,7 +134,13 @@ form_showOpenFilePicker.onsubmit = evt => {
   const opts = Object.fromEntries([...new FormData(evt.target)])
   opts.types = JSON.parse(opts.types || '""')
   opts._preferPolyfill = !!opts._preferPolyfill
-  showOpenFilePicker(opts).then(console.log, console.error)
+  showOpenFilePicker(opts).then(handles => {
+    console.log(handles)
+    alert(handles)
+  }, err => {
+    console.error(err)
+    alert(err)
+  })
 }
 form_showSaveFilePicker.onsubmit = async evt => {
   evt.preventDefault()
@@ -142,22 +152,25 @@ form_showSaveFilePicker.onsubmit = async evt => {
   const format = handle.name.split('.').pop()
   const image = await img(format)
   const ws = await handle.createWritable()
-  ws.write(image)
-  ws.close()
+  await ws.write(image)
+  await ws.close()
 }
 
 async function init () {
   const drivers = await Promise.allSettled([
     getOriginPrivateDirectory(),
-    getOriginPrivateDirectory(import('../src/adapters/sandbox.js')),
-    getOriginPrivateDirectory(import('../src/adapters/memory.js')),
-    getOriginPrivateDirectory(import('../src/adapters/indexeddb.js')),
-    getOriginPrivateDirectory(import('../src/adapters/cache.js'))
+    getOriginPrivateDirectory(import('../lib/adapters/sandbox.js')),
+    getOriginPrivateDirectory(import('../lib/adapters/memory.js')),
+    getOriginPrivateDirectory(import('../lib/adapters/indexeddb.js')),
+    getOriginPrivateDirectory(import('../lib/adapters/cache.js'))
   ])
   let j = 0
   for (const driver of drivers) {
     j++
-    if (driver.status === 'rejected') continue
+    if (driver.status === 'rejected') {
+      console.error('Driver failed to load:' + driver.reason)
+      continue
+    }
     const root = driver.value
     await cleanupSandboxedFileSystem(root)
     const total = performance.now()
@@ -185,13 +198,23 @@ globalThis.ondrop = async evt => {
   evt.preventDefault()
 
   for (const item of evt.dataTransfer.items) {
-    item.getAsFileSystemHandle().then(showFileStructure)
+    item.getAsFileSystemHandle().then(async handle => {
+      if (handle.kind === 'directory') {
+        showFileStructure(handle)
+      } else {
+        const file = await handle.getFile()
+        console.log(file)
+        alert(file)
+      }
+    })
   }
 }
 
+/**
+ * @param {FileSystemDirectoryHandle} root
+ */
 async function showFileStructure (root) {
   const result = []
-  let cwd = ''
 
   /** @type {HTMLInputElement} */
   const input = document.querySelector('[form=form_showOpenFilePicker][name="_preferPolyfill"]')
@@ -200,10 +223,10 @@ async function showFileStructure (root) {
   try {
     readonly && assert(await getDirectoryEntryCount(root) > 0)
     readonly && assert(await root.requestPermission({ writable: true }) === 'denied')
-    const dirs = [root]
+    const dirs = [{ handle: root, path: "" }]
 
-    for (const dir of dirs) {
-      cwd += dir.name + '/'
+    for (const { handle: dir, path } of dirs) {
+      const cwd = path + dir.name + '/'
       for await (const [name, handle] of dir) {
         // Everything should be read only
         readonly && assert(await handle.requestPermission({ writable: true }) === 'denied')
@@ -215,7 +238,7 @@ async function showFileStructure (root) {
         } else {
           result.push(cwd + handle.name + '/')
           assert(handle.kind === 'directory')
-          dirs.push(handle)
+          dirs.push({ handle, path: cwd })
         }
       }
     }

@@ -1,15 +1,22 @@
 {
   "compilerOptions": {
-    "noEmit": false,
-    "target": "esnext",
-    "module": "esnext",
+    "target": "es2018",
+    "module": "ESNext",
+    "moduleResolution": "node",
     "declaration": true,
     "allowJs": true,
-    "checkJs": true,
-    "removeComments": true,
-    "emitDeclarationOnly": true,
     "lib": ["es2019", "dom"],
-    "outDir": "./types/"
+    "outDir": "./lib/",
+    "strict": true,
+    "noUnusedLocals": true,
+		"noImplicitReturns": true,
+		"noImplicitOverride": true,
+    "sourceMap": true,
+    "forceConsistentCasingInFileNames": true,
+    "stripInternal": true,
+    "allowSyntheticDefaultImports": true
   },
-  "include": ["src/*.js"]
+  "include": [
+    "src"
+  ]
 }

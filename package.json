@@ -1,19 +1,22 @@
 {
   "name": "native-file-system-adapter",
   "version": "1.0.1",
-  "description": "Native File System API",
-  "main": "src/es6.js",
-  "module": "./src/es6.js",
+  "description": "Native File System Access API",
+  "browser": "./lib/es2018.js",
+  "main": "./lib/node.js",
+  "module": "./lib/node.js",
   "directories": {
     "example": "example"
   },
   "type": "module",
   "scripts": {
-    "test": "exit 0",
-    "test:browser": "airtap --local test/browser.js",
-    "test:server": "node test/server-side.js",
-    "test:memory": "node test/memory.js",
-    "build": "rm -rf dist && rollup -c rollup.config.js"
+    "test": "npm run check-no-top-level-await && npm run test-node",
+    "test-node": "npm run build && cd test && node test-node.js",
+    "test-deno": "npm run build && cd test && deno run --allow-read --allow-net --allow-write test-deno.js",
+    "prepare": "npm run build",
+    "build": "rm -rf lib && tsc -p . && node copy-polyfill.js",
+    "check-no-top-level-await": "tsc -p . --noEmit --target es2016",
+    "watch": "tsc -w -p ."
   },
   "repository": {
     "type": "git",
@@ -32,25 +35,33 @@
     "spec"
   ],
   "author": "Jimmy Wärting",
+  "contributors": [
+    {
+      "name": "Alexandru Ciuca"
+    }
+  ],
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/jimmywarting/native-file-system-adapter/issues"
   },
   "homepage": "https://github.com/jimmywarting/native-file-system-adapter#readme",
   "optionalDependencies": {
-    "web-streams-polyfill": "^2.1.1"
+    "web-streams-polyfill": "^3.1.0"
   },
   "dependencies": {
+    "@types/wicg-file-system-access": "^2020.9.2",
     "fetch-blob": "^3.0.0",
     "node-domexception": "^1.0.0"
   },
   "devDependencies": {
-    "@types/filesystem": "^0.0.30",
-    "rollup": "^2.51.1",
-    "rollup-plugin-multi-input": "^1.3.1",
-    "rollup-plugin-terser": "^7.0.2",
+    "@types/filesystem": "0.0.32",
+    "@types/node": "^14.17.11",
     "standard": "^16.0.3",
-    "tape": "^5.2.2"
+    "tape": "^5.2.2",
+    "typescript": "^4.3.5"
+  },
+  "engines": {
+    "node": ">=14"
   },
   "funding": [
     {
