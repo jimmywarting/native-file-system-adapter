@@ -35,7 +35,10 @@ class MessagePortSource {
   /** @param {{ type: number; chunk: Uint8Array; reason: any; }} message */
   onMessage (message) {
     // enqueue() will call pull() if needed when there's no backpressure
-    if (message.type === WRITE) this.controller.enqueue(message.chunk)
+    if (message.type === WRITE) {
+      this.controller.enqueue(message.chunk)
+      this.port.postMessage({ type: PULL })
+    }
     if (message.type === ABORT) {
       this.controller.error(message.reason)
       this.port.close()
