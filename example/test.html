@@ -44,10 +44,12 @@
   </style>
   <body>
     <script>
-    navigator.serviceWorker.register('./sw.js', {
-      // type: 'module',
-      // scope: './'
-    })
+    if (navigator.serviceWorker) {
+      navigator.serviceWorker.register('./sw.js', {
+        // type: 'module',
+        // scope: './'
+      })
+    }
     </script>
     <script type="module" src="./test.js"></script>
     <table id="table">
