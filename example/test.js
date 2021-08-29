@@ -188,10 +188,19 @@ globalThis.ondrop = async evt => {
   evt.preventDefault()
 
   for (const item of evt.dataTransfer.items) {
-    item.getAsFileSystemHandle().then(showFileStructure)
+    item.getAsFileSystemHandle().then(async handle => {
+      if (handle.kind === 'directory') {
+        showFileStructure(handle)
+      } else {
+        const file = await handle.getFile()
+        console.log(file)
+        alert(file)
+      }
+    })
   }
 }
 
+/** @param {fs.FileSystemDirectoryHandle} root */
 async function showFileStructure (root) {
   const result = []
   let cwd = ''
