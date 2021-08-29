@@ -36,6 +36,11 @@
   "bugs": {
     "url": "https://github.com/jimmywarting/native-file-system-adapter/issues"
   },
+  "contributors": [
+    {
+      "name": "Alexandru Ciuca"
+    }
+  ],
   "homepage": "https://github.com/jimmywarting/native-file-system-adapter#readme",
   "optionalDependencies": {
     "web-streams-polyfill": "^2.1.1"
