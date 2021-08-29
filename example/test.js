@@ -136,8 +136,8 @@ form_showSaveFilePicker.onsubmit = async evt => {
   const format = handle.name.split('.').pop()
   const image = await img(format)
   const ws = await handle.createWritable()
-  ws.write(image)
-  ws.close()
+  await ws.write(image)
+  await ws.close()
 }
 
 async function init () {
