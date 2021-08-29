@@ -151,7 +151,10 @@ async function init () {
   let j = 0
   for (const driver of drivers) {
     j++
-    if (driver.status === 'rejected') continue
+    if (driver.status === 'rejected') {
+      console.error('Driver failed to load:' + driver.reason)
+      continue
+    }
     const root = driver.value
     await cleanupSandboxedFileSystem(root)
     const total = performance.now()
