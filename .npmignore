@@ -1,0 +1,4 @@
+/tsconfig.json
+/copy-polyfill.js
+/test
+.*
