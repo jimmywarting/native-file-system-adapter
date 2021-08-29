@@ -93,28 +93,22 @@ $types1.value = JSON.stringify([
   {
     description: 'Text Files',
     accept: {
-      'text/plain': ['txt', 'text'],
-      'text/html': ['html', 'htm']
+      'text/plain': ['.txt', '.text'],
+      'text/html': ['.html', '.htm']
     }
   },
   {
     description: 'Images',
     accept: {
-      'image/*': ['png', 'gif', 'jpeg', 'jpg']
+      'image/*': ['.png', '.gif', '.jpeg', '.jpg']
     }
   }
 ], null, 2)
 
 $types2.value = JSON.stringify([
-  {
-    accept: { 'image/jpg': ['jpg'] }
-  },
-  {
-    accept: { 'image/png': ['png'] }
-  },
-  {
-    accept: { 'image/webp': ['webp'] }
-  }
+  { accept: { 'image/jpg': ['.jpg'] } },
+  { accept: { 'image/png': ['.png'] } },
+  { accept: { 'image/webp': ['.webp'] } }
 ], null, 2)
 
 form_showDirectoryPicker.onsubmit = evt => {
