@@ -1,10 +1,9 @@
-import * as fs from '../src/es6.js'
+import { existsSync, mkdirSync, rmdirSync } from 'node:fs'
+import { getOriginPrivateDirectory } from '../src/es6.js'
 import steps from './test.js'
-import {
-  cleanupSandboxedFileSystem
-} from '../test/util.js'
+import { cleanupSandboxedFileSystem } from '../test/util.js'
 
-const { getOriginPrivateDirectory } = fs
+let hasFailures = false
 
 async function test(fs, step, root) {
   try {
@@ -12,11 +11,16 @@ async function test(fs, step, root) {
     await step.fn(root)
     console.log(`[OK]: ${fs} ${step.desc}`)
   } catch (err) {
-    console.log(`[ERR]: ${fs} ${step.desc}`)
+    console.log(`[ERR]: ${fs} ${step.desc}\n\t-> ${err.message}`)
+    hasFailures = true
   }
 }
 
 async function start () {
+  const testFolderPath = './testfolder'
+  if (!existsSync(testFolderPath)) {
+    mkdirSync(testFolderPath)
+  }
   const root = await getOriginPrivateDirectory(import('../src/adapters/node.js'), './testfolder')
   const memory = await getOriginPrivateDirectory(import('../src/adapters/memory.js'))
 
@@ -25,12 +29,21 @@ async function start () {
     await test('server', step, root).finally()
   }
 
+  rmdirSync(testFolderPath)
+
   console.log('\n\n\n')
-  setTimeout(()=>{}, 222222)
 
   for (let step of steps) {
     await test('memory', step, memory).finally()
   }
+
+  if (hasFailures) {
+    console.log(`\n\nSome tests failed. See output above.`)
+    process.exit(1)
+  }
 }
 
-start()
+start().catch(e => {
+  console.error(e);
+  process.exit(1)
+})

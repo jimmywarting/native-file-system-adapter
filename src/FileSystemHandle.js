@@ -47,7 +47,12 @@ class FileSystemHandle {
    */
   async isSameEntry (other) {
     if (this === other) return true
-    if (this.kind !== other.kind) return false
+    if (
+      (!other) ||
+      (typeof other !== 'object') ||
+      (this.kind !== other.kind) ||
+      (!other[kAdapter])
+    ) return false
     return this[kAdapter].isSameEntry(other[kAdapter])
   }
 }

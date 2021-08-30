@@ -11,8 +11,8 @@
   "scripts": {
     "test": "exit 0",
     "test:browser": "airtap --local test/browser.js",
-    "test:server": "node test/server-side.js",
-    "test:memory": "node test/memory.js",
+    "test:node": "node test/test-node.js",
+    "test:deno": "node test/test-deno.js",
     "build": "rm -rf dist && rollup -c rollup.config.js"
   },
   "repository": {
