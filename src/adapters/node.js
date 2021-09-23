@@ -1,10 +1,9 @@
-import fs from 'fs/promises'
-import { errors } from '../util.js'
-import { join } from 'path'
+import fs from 'node:fs/promises'
+import { join } from 'node:path'
+import 'node-domexception'
 import Blob from 'fetch-blob'
 import { fileFrom } from 'fetch-blob/from.js'
-import DOMException from 'node-domexception'
-
+import { errors } from '../util.js'
 // import mime from 'mime-types'
 
 const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX } = errors

@@ -16,20 +16,34 @@ class FileSystemHandle {
     this[kAdapter] = adapter
   }
 
-  async queryPermission (options = {}) {
-    if (options.readable) return 'granted'
+  async queryPermission ({mode = 'read'} = {}) {
     const handle = this[kAdapter]
-    return handle.queryPermission ?
-      await handle.queryPermission(options) :
-      handle.writable
-        ? 'granted'
-        : 'denied'
+    if (handle.queryPermission) {
+      return handle.queryPermission({mode})
+    }
+
+    if (mode === 'read') {
+      return 'granted'
+    } else if (mode === 'readwrite') {
+      return handle.writable ? 'granted' : 'denied'
+    } else {
+      throw new TypeError(`Mode ${mode} must be 'read' or 'readwrite'`)
+    }
   }
 
-  async requestPermission (options = {}) {
-    if (options.readable) return 'granted'
+  async requestPermission ({mode = 'read'} = {}) {
     const handle = this[kAdapter]
-    return handle.writable ? 'granted' : 'denied'
+    if (handle.requestPermission) {
+      return handle.requestPermission({mode})
+    }
+
+    if (mode === 'read') {
+      return 'granted'
+    } else if (mode === 'readwrite') {
+      return handle.writable ? 'granted' : 'denied'
+    } else {
+      throw new TypeError(`Mode ${mode} must be 'read' or 'readwrite'`)
+    }
   }
 
   /**
