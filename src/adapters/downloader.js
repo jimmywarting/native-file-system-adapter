@@ -24,7 +24,7 @@ export class FileHandle {
   async createWritable (options = {}) {
     if (!TransformStream) {
       // @ts-ignore
-      const ponyfill = await import('https://cdn.jsdelivr.net/npm/web-streams-polyfill@2.1.1/dist/ponyfill.es2018.mjs')
+      const ponyfill = await import('https://cdn.jsdelivr.net/npm/web-streams-polyfill@3/dist/ponyfill.es2018.mjs')
       TransformStream = ponyfill.TransformStream
       WritableStream = ponyfill.WritableStream
     }

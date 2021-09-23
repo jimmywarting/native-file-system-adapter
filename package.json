@@ -1,6 +1,6 @@
 {
   "name": "native-file-system-adapter",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Native File System API",
   "main": "src/es6.js",
   "module": "./src/es6.js",
@@ -10,9 +10,9 @@
   "type": "module",
   "scripts": {
     "test": "exit 0",
-    "test:browser": "airtap --local test/browser.js",
+    "test:browser": "php -S localhost:4444 & open http://localhost:4444/example/test.html",
     "test:node": "node test/test-node.js",
-    "test:deno": "node test/test-deno.js",
+    "test:deno": "deno run --allow-read test/test-deno.js",
     "build": "rm -rf dist && rollup -c rollup.config.js"
   },
   "repository": {
@@ -43,7 +43,7 @@
   ],
   "homepage": "https://github.com/jimmywarting/native-file-system-adapter#readme",
   "optionalDependencies": {
-    "web-streams-polyfill": "^2.1.1"
+    "web-streams-polyfill": "^3.1.1"
   },
   "dependencies": {
     "fetch-blob": "^3.0.0",

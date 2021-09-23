@@ -1,6 +1,4 @@
-// @ts-check
-
-import { join, basename } from 'https://deno.land/std@0.98.0/path/mod.ts'
+import { join, basename } from 'https://deno.land/std@0.108.0/path/mod.ts'
 import { errors } from '../util.js'
 
 const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX } = errors
