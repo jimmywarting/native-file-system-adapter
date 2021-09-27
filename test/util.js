@@ -1,4 +1,4 @@
-import * as fs from '../src/es6.js'
+/** @typedef {import('../src/FileSystemDirectoryHandle').FileSystemDirectoryHandle} FileSystemDirectoryHandle */
 
 export function streamFromFetch (data) {
   return new ReadableStream({
@@ -22,7 +22,7 @@ export function capture (p) {
   return p.catch(_ => _)
 }
 
-/** @param {fs.FileSystemDirectoryHandle} root */
+/** @param {FileSystemDirectoryHandle} root */
 export async function cleanupSandboxedFileSystem (root) {
   for await (const [name, entry] of root) {
     await root.removeEntry(name, { recursive: entry.kind === 'directory' })
@@ -49,7 +49,7 @@ export async function getDirectoryEntryCount (handle) {
 
 /**
  * @param {string} name
- * @param {fs.FileSystemDirectoryHandle} parent
+ * @param {FileSystemDirectoryHandle} parent
  */
 export async function createEmptyFile (name, parent) {
   const handle = await parent.getFileHandle(name, { create: true })
@@ -61,7 +61,7 @@ export async function createEmptyFile (name, parent) {
 /**
  * @param {string} fileName
  * @param {string} contents
- * @param {fs.FileSystemDirectoryHandle} parent
+ * @param {FileSystemDirectoryHandle} parent
  */
 export async function createFileWithContents (fileName, contents, parent) {
   const handle = await createEmptyFile(fileName, parent)
@@ -72,7 +72,7 @@ export async function createFileWithContents (fileName, contents, parent) {
 }
 
 /**
- * @param {fs.FileSystemDirectoryHandle} handle
+ * @param {FileSystemDirectoryHandle} handle
  * @returns {Promise<string[]>}
  */
 export async function getSortedDirectoryEntries (handle) {
@@ -86,7 +86,7 @@ export async function getSortedDirectoryEntries (handle) {
 
 /**
  * @param {string} name
- * @param {fs.FileSystemDirectoryHandle} parent
+ * @param {FileSystemDirectoryHandle} parent
  */
 export async function createDirectory (name, parent) {
   return parent.getDirectoryHandle(name, { create: true })
