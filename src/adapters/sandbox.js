@@ -82,7 +82,7 @@ export class FileHandle {
   }
 
   isSameEntry (other) {
-    return this === other
+    return this.file.toURL() === other.file.toURL()
   }
 
   /** @return {Promise<File>} */

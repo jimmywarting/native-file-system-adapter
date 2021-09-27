@@ -108,7 +108,7 @@ export class FileHandle {
 
   /** @param {FileHandle} other */
   async isSameEntry (other) {
-    return this === other
+    return this.path === other.path
   }
 
   async getFile () {
