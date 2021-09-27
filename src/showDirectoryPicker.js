@@ -12,11 +12,30 @@ async function showDirectoryPicker (options = {}) {
 
   const input = document.createElement('input')
   input.type = 'file'
+
+  // Even with this check, the browser may support the attribute, but not the functionality (e.g. iOS Safari)
+  if (!('webkitdirectory' in input)) {
+    throw new Error(`HTMLInputElement.webkitdirectory is not supported`)
+  }
+
+  // See https://stackoverflow.com/questions/47664777/javascript-file-input-onchange-not-working-ios-safari-only
+  input.style.position = 'fixed'
+  input.style.top = '-100000px'
+  input.style.left = '-100000px'
+  document.body.appendChild(input)
+
   input.webkitdirectory = true
 
+
   return new Promise(resolve => {
+    // Lazy load while the user is choosing the directory
     const p = import('./util.js').then(m => m.fromInput)
-    input.onchange = () => resolve(p.then(fn => fn(input)))
+
+    input.addEventListener('change', () => {
+      resolve(p.then(fn => fn(input)))
+      document.body.removeChild(input)
+    })
+
     input.click()
   })
 }
