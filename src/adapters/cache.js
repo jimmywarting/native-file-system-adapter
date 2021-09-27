@@ -89,6 +89,10 @@ class Sink {
 }
 
 export class FileHandle {
+  /**
+   * @param {string} path
+   * @param {Cache} cache
+   */
   constructor (path, cache) {
     this._cache = cache
     this.path = path
@@ -101,7 +105,8 @@ export class FileHandle {
     return this.path.split('/').pop()
   }
 
-  isSameEntry (other) {
+  /** @param {FileHandle} other */
+  async isSameEntry (other) {
     return this === other
   }
 
@@ -144,11 +149,15 @@ export class FolderHandle {
   }
 
   /** @param {FolderHandle} other  */
-  isSameEntry (other) {
+  async isSameEntry (other) {
     return this._dir === other._dir
   }
 
-  async getDirectoryHandle (name, opts = {}) {
+  /**
+   * @param {string} name
+   * @param {{ create: boolean; }} opts
+   */
+  async getDirectoryHandle (name, opts) {
     const path = this._dir.endsWith('/') ? this._dir + name : `${this._dir}/${name}`
     const tree = await this._tree
     if (tree.hasOwnProperty(path)) {
@@ -176,7 +185,11 @@ export class FolderHandle {
     return this._cache.put(this._dir, new Response(JSON.stringify(tree), DIR))
   }
 
-  async getFileHandle (name, opts = {}) {
+  /**
+   * @param {string} name
+   * @param {{ create: boolean; }} opts
+   */
+  async getFileHandle (name, opts) {
     const path = this._dir.endsWith('/') ? this._dir + name : `${this._dir}/${name}`
     const tree = await this._tree
     if (tree.hasOwnProperty(path)) {
