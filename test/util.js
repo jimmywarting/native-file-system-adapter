@@ -1,8 +1,8 @@
 import * as fs from '../src/es6.js'
 
-export function streamFromFetch(data) {
+export function streamFromFetch (data) {
   return new ReadableStream({
-    start(ctrl) {
+    start (ctrl) {
       ctrl.enqueue(data)
       ctrl.close()
     }
@@ -30,28 +30,28 @@ export async function cleanupSandboxedFileSystem (root) {
 }
 
 export async function getFileSize (handle) {
-    const file = await handle.getFile()
-    return file.size
+  const file = await handle.getFile()
+  return file.size
 }
 
 export async function getFileContents (handle) {
-    const file = await handle.getFile()
-    return file.text()
+  const file = await handle.getFile()
+  return file.text()
 }
 
 export async function getDirectoryEntryCount (handle) {
-    let result = 0
-    for await (let entry of handle.entries()) {
-      result++
-    }
-    return result
+  let result = 0
+  for await (const {} of handle.entries()) {
+    result++
+  }
+  return result
 }
 
 /**
  * @param {string} name
  * @param {fs.FileSystemDirectoryHandle} parent
  */
-export async function createEmptyFile(name, parent) {
+export async function createEmptyFile (name, parent) {
   const handle = await parent.getFileHandle(name, { create: true })
   // Make sure the file is empty.
   assert(await getFileSize(handle) === 0)

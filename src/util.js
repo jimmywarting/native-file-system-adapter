@@ -14,7 +14,7 @@ export const config = {
 
 export async function fromDataTransfer (entries) {
   console.warn('deprecated fromDataTransfer - use `dt.items[0].getAsFileSystemHandle()` instead')
-  const [memory, sandbox, FileSystemDirectoryHandle] = await Promise.all([
+  const [memory, sandbox, fs] = await Promise.all([
     import('./adapters/memory.js'),
     import('./adapters/sandbox.js'),
     import('./FileSystemDirectoryHandle.js')
@@ -26,7 +26,7 @@ export async function fromDataTransfer (entries) {
     : new sandbox.FolderHandle(entry, false)
   )
 
-  return new FileSystemDirectoryHandle.default(folder)
+  return new fs.FileSystemDirectoryHandle(folder)
 }
 
 export async function fromInput (input) {

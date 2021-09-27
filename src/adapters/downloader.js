@@ -14,8 +14,12 @@ export class FileHandle {
     this.kind = 'file'
   }
 
-  getFile () {
+  async getFile () {
     throw new DOMException(...GONE)
+  }
+
+  async isSameEntry(other) {
+    return this === other
   }
 
   /**
@@ -28,7 +32,7 @@ export class FileHandle {
       TransformStream = ponyfill.TransformStream
       WritableStream = ponyfill.WritableStream
     }
-    const sw = await navigator.serviceWorker.getRegistration()
+    const sw = await navigator.serviceWorker?.getRegistration()
     const link = document.createElement('a')
     const ts = new TransformStream()
     const sink = ts.writable
@@ -36,6 +40,7 @@ export class FileHandle {
     link.download = this.name
 
     if (isSafari || !sw) {
+      /** @type {Blob[]} */
       let chunks = []
       ts.readable.pipeTo(new WritableStream({
         write (chunk) {
@@ -97,10 +102,11 @@ const ABORT = 1
 const CLOSE = 2
 
 class MessagePortSink {
+  /** @param {MessagePort} port */
   constructor (port) {
+    port.onmessage = event => this._onMessage(event.data)
     this._port = port
     this._resetReady()
-    this._port.onmessage = event => this._onMessage(event.data)
   }
 
   start (controller) {

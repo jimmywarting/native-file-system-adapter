@@ -6,7 +6,7 @@ import {
 
 const { getOriginPrivateDirectory } = fs
 
-async function test(fs, step, root) {
+async function test (fs, step, root) {
   try {
     await cleanupSandboxedFileSystem(root)
     await step.fn(root)
@@ -20,12 +20,12 @@ async function start () {
   const root = await getOriginPrivateDirectory(import('../src/adapters/deno.js'), './testfolder')
   const memory = await getOriginPrivateDirectory(import('../src/adapters/memory.js'))
 
-  for (let step of steps) {
+  for (const step of steps) {
     if (step.desc.includes('atomic')) continue
     await test('server', step, root).finally()
   }
 
-  for (let step of steps) {
+  for (const step of steps) {
     await test('memory', step, memory).finally()
   }
 }

@@ -6,6 +6,7 @@ const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX } = errors
 
 const DIR = { headers: { 'content-type': 'dir' } }
 const FILE = () => ({ headers: { 'content-type': 'file', 'last-modified': Date.now() } })
+const hasOwn = Object.prototype.hasOwnProperty
 
 class Sink {
   constructor (cache, path, file) {
@@ -147,6 +148,7 @@ export class FolderHandle {
     this.name = dir.split('/').pop()
   }
 
+  /** @returns {AsyncGenerator<[string, FileHandle | FolderHandle]>} */
   async * entries () {
     for (const [path, isFile] of Object.entries(await this._tree)) {
       yield [path.split('/').pop(), isFile ? new FileHandle(path, this._cache) : new FolderHandle(path, this._cache)]
@@ -165,7 +167,7 @@ export class FolderHandle {
   async getDirectoryHandle (name, opts) {
     const path = this._dir.endsWith('/') ? this._dir + name : `${this._dir}/${name}`
     const tree = await this._tree
-    if (tree.hasOwnProperty(path)) {
+    if (hasOwn.call(tree, path)) {
       const isFile = tree[path]
       if (isFile) throw new DOMException(...MISMATCH)
       return new FolderHandle(path, this._cache)
@@ -197,7 +199,7 @@ export class FolderHandle {
   async getFileHandle (name, opts) {
     const path = this._dir.endsWith('/') ? this._dir + name : `${this._dir}/${name}`
     const tree = await this._tree
-    if (tree.hasOwnProperty(path)) {
+    if (hasOwn.call(tree, path)) {
       const isFile = tree[path]
       if (!isFile) throw new DOMException(...MISMATCH)
       return new FileHandle(path, this._cache)
@@ -214,10 +216,14 @@ export class FolderHandle {
     }
   }
 
+  /**
+   * @param {string} name
+   * @param {{ recursive: boolean; }} opts
+   */
   async removeEntry (name, opts) {
     const tree = await this._tree
     const path = this._dir.endsWith('/') ? this._dir + name : `${this._dir}/${name}`
-    if (tree.hasOwnProperty(path)) {
+    if (hasOwn.call(tree, path)) {
       if (opts.recursive) {
         const toDelete = [...Object.entries(tree)]
         while (toDelete.length) {

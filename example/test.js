@@ -3,7 +3,8 @@ import tests from '../test/test.js'
 import {
   cleanupSandboxedFileSystem,
   getDirectoryEntryCount,
-  assert
+  assert,
+  capture
 } from '../test/util.js'
 
 const {
@@ -57,8 +58,9 @@ function dt (files) {
 }
 
 try {
-  if (DataTransferItem.prototype.getAsFileSystemHandle.toString().includes('native'))
-    throw new Error(`Don't work with mocked data`)
+  if (DataTransferItem.prototype.getAsFileSystemHandle.toString().includes('native')) {
+    throw new Error("Don't work with mocked data")
+  }
 
   const dataTransfer = dt([
     new File(['content'], 'sample1.txt'),
@@ -84,8 +86,8 @@ function img (format) {
   c.addColorStop(1, 'blue')
   b.fillStyle = c
   b.fillRect(0, 0, a.width, a.height)
-  return new Promise(rs => {
-    a.toBlob(rs, 'image/' + format, 1)
+  return new Promise(resolve => {
+    a.toBlob(resolve, 'image/' + format, 1)
   })
 }
 

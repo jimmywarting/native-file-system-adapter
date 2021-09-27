@@ -5,7 +5,7 @@ import { cleanupSandboxedFileSystem } from '../test/util.js'
 
 let hasFailures = false
 
-async function test(fs, step, root) {
+async function test (fs, step, root) {
   try {
     await cleanupSandboxedFileSystem(root)
     await step.fn(root)
@@ -24,7 +24,7 @@ async function start () {
   const root = await getOriginPrivateDirectory(import('../src/adapters/node.js'), './testfolder')
   const memory = await getOriginPrivateDirectory(import('../src/adapters/memory.js'))
 
-  for (let step of steps) {
+  for (const step of steps) {
     if (step.desc.includes('atomic')) continue
     await test('server', step, root).finally()
   }
@@ -33,17 +33,17 @@ async function start () {
 
   console.log('\n\n\n')
 
-  for (let step of steps) {
+  for (const step of steps) {
     await test('memory', step, memory).finally()
   }
 
   if (hasFailures) {
-    console.log(`\n\nSome tests failed. See output above.`)
+    console.log('\n\nSome tests failed. See output above.')
     process.exit(1)
   }
 }
 
 start().catch(e => {
-  console.error(e);
+  console.error(e)
   process.exit(1)
 })

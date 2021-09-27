@@ -108,7 +108,7 @@ export class FileHandle {
     return fileFrom(this.#path)
   }
 
-  isSameEntry (other) {
+  async isSameEntry (other) {
     return this.#path === this.#getPath.apply(other)
   }
 
@@ -136,7 +136,7 @@ export class FolderHandle {
     this.#path = join(path)
   }
 
-  isSameEntry (other) {
+  async isSameEntry (other) {
     return this.#path === this.#getPath.apply(other)
   }
 
@@ -144,6 +144,7 @@ export class FolderHandle {
     return this.#path
   }
 
+  /** @returns {AsyncGenerator<[string, FileHandle | FolderHandle]>} */
   async * entries () {
     const dir = this.#path
     try {
@@ -201,7 +202,7 @@ export class FolderHandle {
     return new FileHandle(path, name)
   }
 
-  queryPermission () {
+  async queryPermission () {
     return 'granted'
   }
 

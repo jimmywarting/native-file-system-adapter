@@ -122,6 +122,7 @@ export class FolderHandle {
     return this.dir.fullPath === other.dir.fullPath
   }
 
+  /** @returns {AsyncGenerator<[string, FileHandle | FolderHandle]>} */
   async * entries () {
     const reader = this.dir.createReader()
     const entries = await new Promise(reader.readEntries.bind(reader))
@@ -160,8 +161,8 @@ export class FolderHandle {
    */
   async removeEntry (name, opts) {
     /** @type {Error|FolderHandle|FileHandle} */
-    const entry = await this.getDirectoryHandle(name, {create: false}).catch(err =>
-      err.name === 'TypeMismatchError' ? this.getFileHandle(name, {create: false}) : err
+    const entry = await this.getDirectoryHandle(name, { create: false }).catch(err =>
+      err.name === 'TypeMismatchError' ? this.getFileHandle(name, { create: false }) : err
     )
 
     if (entry instanceof Error) throw entry

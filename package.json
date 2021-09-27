@@ -57,6 +57,20 @@
     "standard": "^16.0.3",
     "tape": "^5.2.2"
   },
+  "standard": {
+    "globals": [
+      "File",
+      "performance",
+      "Blob",
+      "Response",
+      "ClipboardEvent",
+      "DataTransferItem",
+      "FormData",
+      "alert",
+      "ReadableStream",
+      "DataTransfer"
+    ]
+  },
   "funding": [
     {
       "type": "github",

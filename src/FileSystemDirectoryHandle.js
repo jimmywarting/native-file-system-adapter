@@ -25,7 +25,7 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
     return new FileSystemDirectoryHandle(await this[kAdapter].getDirectoryHandle(name, options))
   }
 
-  /** @returns {AsyncGenerator<[string, FileSystemHandle], void, unknown>} */
+  /** @returns {AsyncGenerator<[string, FileSystemHandle]>} */
   async * entries () {
     for await (const [_, entry] of this[kAdapter].entries())
       yield [entry.name, entry.kind === 'file' ? new FileSystemFileHandle(entry) : new FileSystemDirectoryHandle(entry)]
