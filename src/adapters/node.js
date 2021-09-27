@@ -146,7 +146,11 @@ export class FolderHandle {
     }
   }
 
-  async getDirectoryHandle (name, opts = {}) {
+  /**
+   * @param {string} name
+   * @param {{ create: boolean; }} opts
+   */
+  async getDirectoryHandle (name, opts) {
     const path = join(this._path, name)
     const stat = await fs.lstat(path).catch(err => {
       if (err.code !== 'ENOENT') throw err
@@ -159,7 +163,11 @@ export class FolderHandle {
     return new FolderHandle(path, name)
   }
 
-  async getFileHandle (name, opts = {}) {
+  /**
+   * @param {string} name
+   * @param {{ create: boolean; }} opts
+   */
+  async getFileHandle (name, opts) {
     const path = join(this._path, name)
     const stat = await fs.lstat(path).catch(err => {
       if (err.code !== 'ENOENT') throw err

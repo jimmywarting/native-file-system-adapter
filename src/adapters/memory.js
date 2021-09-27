@@ -150,8 +150,12 @@ export class FolderHandle {
     return this === other
   }
 
-  /** @param {string} name */
-  getDirectoryHandle (name, opts = {}) {
+
+  /**
+   * @param {string} name
+   * @param {{ create: boolean; }} opts
+   */
+  getDirectoryHandle (name, opts) {
     if (this.deleted) throw new DOMException(...GONE)
     const entry = this._entries[name]
     if (entry) { // entry exist
@@ -169,8 +173,11 @@ export class FolderHandle {
     }
   }
 
-  /** @param {string} name */
-  getFileHandle (name, opts = {}) {
+  /**
+   * @param {string} name
+   * @param {{ create: boolean; }} opts
+   */
+  getFileHandle (name, opts) {
     const entry = this._entries[name]
     const isFile = entry instanceof FileHandle
     if (entry && isFile) return entry

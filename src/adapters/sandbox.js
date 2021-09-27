@@ -132,9 +132,10 @@ export class FolderHandle {
 
   /**
    * @param {string} name
+   * @param {{ create: boolean; }} opts
    * @returns {Promise<FolderHandle>}
    */
-  getDirectoryHandle (name, opts = {}) {
+  getDirectoryHandle (name, opts) {
     return new Promise((resolve, reject) => {
       this.dir.getDirectory(name, opts, dir => {
         resolve(new FolderHandle(dir))
@@ -144,9 +145,10 @@ export class FolderHandle {
 
   /**
    * @param {string} name
+   * @param {{ create: boolean; }} opts
    * @returns {Promise<FileHandle>}
    */
-  getFileHandle (name, opts = {}) {
+  getFileHandle (name, opts) {
     return new Promise((resolve, reject) =>
       this.dir.getFile(name, opts, file => resolve(new FileHandle(file)), reject)
     )
@@ -154,12 +156,12 @@ export class FolderHandle {
 
   /**
    * @param {string} name
-   * @param {{ recursive: any; }} opts
+   * @param {{ recursive: boolean; }} opts
    */
   async removeEntry (name, opts) {
     /** @type {Error|FolderHandle|FileHandle} */
-    const entry = await this.getDirectoryHandle(name).catch(err =>
-      err.name === 'TypeMismatchError' ? this.getFileHandle(name) : err
+    const entry = await this.getDirectoryHandle(name, {create: false}).catch(err =>
+      err.name === 'TypeMismatchError' ? this.getFileHandle(name, {create: false}) : err
     )
 
     if (entry instanceof Error) throw entry

@@ -197,7 +197,11 @@ class FolderHandle {
     return this._id === other._id
   }
 
-  getDirectoryHandle (name, opts = {}) {
+  /**
+   * @param {string} name
+   * @param {{ create: boolean; }} opts
+   */
+  getDirectoryHandle (name, opts) {
     return new Promise((resolve, reject) => {
       const table = store(this._db)[1]
       const req = table.get(this._id)
@@ -220,7 +224,11 @@ class FolderHandle {
     })
   }
 
-  getFileHandle (name, opts = {}) {
+  /**
+   * @param {string} name
+   * @param {{ create: boolean; }} opts
+   */
+  getFileHandle (name, opts) {
     return new Promise((resolve, reject) => {
       const table = store(this._db)[1]
       const query = table.get(this._id)

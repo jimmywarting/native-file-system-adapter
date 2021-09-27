@@ -164,9 +164,9 @@ export class FolderHandle {
 
   /**
    * @param {string} name
-   * @param {{create?: boolean}} opts
+   * @param {{ create: boolean; }} opts
    */
-  async getDirectoryHandle (name, opts = {}) {
+  async getDirectoryHandle (name, opts) {
     const path = join(this.#path, name)
     const stat = await Deno.lstat(path).catch(err => {
       if (err.name !== 'NotFound') throw err
