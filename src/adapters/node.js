@@ -9,46 +9,53 @@ import { errors } from '../util.js'
 const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX } = errors
 
 export class Sink {
+
+  /**
+   * @param {fs.FileHandle} fileHandle
+   * @param {number} size
+   */
   constructor (fileHandle, size) {
-    this.fileHandle = fileHandle
-    this.size = size
-    this.position = 0
+    this._fileHandle = fileHandle
+    this._size = size
+    this._position = 0
   }
+
   async abort() {
-    await this.fileHandle.close()
+    await this._fileHandle.close()
   }
+
   async write (chunk) {
     if (typeof chunk === 'object') {
       if (chunk.type === 'write') {
         if (Number.isInteger(chunk.position) && chunk.position >= 0) {
-          this.position = chunk.position
+          this._position = chunk.position
         }
         if (!('data' in chunk)) {
-          await this.fileHandle.close()
+          await this._fileHandle.close()
           throw new DOMException(...SYNTAX('write requires a data argument'))
         }
         chunk = chunk.data
       } else if (chunk.type === 'seek') {
         if (Number.isInteger(chunk.position) && chunk.position >= 0) {
-          if (this.size < chunk.position) {
+          if (this._size < chunk.position) {
             throw new DOMException(...INVALID)
           }
-          this.position = chunk.position
+          this._position = chunk.position
           return
         } else {
-          await this.fileHandle.close()
+          await this._fileHandle.close()
           throw new DOMException(...SYNTAX('seek requires a position argument'))
         }
       } else if (chunk.type === 'truncate') {
         if (Number.isInteger(chunk.size) && chunk.size >= 0) {
-          await this.fileHandle.truncate(chunk.size)
-          this.size = chunk.size
-          if (this.position > this.size) {
-            this.position = this.size
+          await this._fileHandle.truncate(chunk.size)
+          this._size = chunk.size
+          if (this._position > this._size) {
+            this._position = this._size
           }
           return
         } else {
-          await this.fileHandle.close()
+          await this._fileHandle.close()
           throw new DOMException(...SYNTAX('truncate requires a size argument'))
         }
       }
@@ -60,25 +67,25 @@ export class Sink {
       chunk = Buffer.from(chunk)
     } else if (chunk instanceof Blob) {
       for await (const data of chunk.stream()) {
-        const res = await this.fileHandle.writev([data], this.position)
-        this.position += res.bytesWritten
-        this.size += res.bytesWritten
+        const res = await this._fileHandle.writev([data], this._position)
+        this._position += res.bytesWritten
+        this._size += res.bytesWritten
       }
       return
     }
 
-    const res = await this.fileHandle.writev([chunk], this.position)
-    this.position += res.bytesWritten
-    this.size += res.bytesWritten
+    const res = await this._fileHandle.writev([chunk], this._position)
+    this._position += res.bytesWritten
+    this._size += res.bytesWritten
   }
 
   async close () {
-    await this.fileHandle.close()
+    // First make sure we close the handle
+    await this._fileHandle.close()
   }
 }
 
 export class FileHandle {
-  _path
 
   /**
    * @param {string} path
@@ -97,11 +104,11 @@ export class FileHandle {
     return fileFrom(this._path)
   }
 
-  isSameEntry (other) {
-    return this._path === this.#getPath.apply(other)
+  async isSameEntry (other) {
+    return this._path === this._getPath.apply(other)
   }
 
-  #getPath() {
+  _getPath() {
     return this._path
   }
 
@@ -118,17 +125,18 @@ export class FileHandle {
 export class FolderHandle {
   _path = ''
 
-  /** @param {string} path */
-  constructor (path, name = '') {
+  constructor (path = '', name = '') {
     this.name = name
     this.kind = 'directory'
     this._path = path
   }
 
-  isSameEntry (other) {
+  /** @param {FolderHandle} other */
+  async isSameEntry (other) {
     return this._path === other._path
   }
 
+  /** @returns {AsyncGenerator<[string, FileHandle | FolderHandle]>} */
   async * entries () {
     const dir = this._path
     const items = await fs.readdir(dir).catch(err => {

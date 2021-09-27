@@ -28,7 +28,10 @@ const arr = []
  * @param {string} desc
  * @param {{ (root: FileSystemDirectoryHandle) }} fn
  */
-const t = (desc, fn) => arr.push({desc, fn})
+const t = (desc, fn) => {
+  // if (desc === 'removeEntry() on a non-empty directory should fail')
+  arr.push({desc, fn})
+}
 
 /** @type {Error|TypeError|DOMException} */
 let err
@@ -683,6 +686,13 @@ t('getWriter() can be used', async root => {
   assert(await getFileSize(handle) === 6)
 })
 
+// TODO(investigate): https://github.com/WICG/file-system-access/issues/334
+// t('createWritable() works after file is deleted', async root => {
+//   handle = await createEmptyFile('writer_written', root)
+//   await root.removeEntry('writer_written')
+//   err = await capture(handle.createWritable())
+// })
+
 t('writing small bits advances the position', async root => {
   handle = await createEmptyFile('writer_written', root)
   wfs = await handle.createWritable()
@@ -747,26 +757,28 @@ t('createWritable() fails when parent directory is removed', async root => {
   assert(err.name === 'NotFoundError')
 })
 
+/*
 t('write() fails when parent directory is removed', async root => {
   // TODO: fix me
-  // dir = await createDirectory('parent_dir', root)
-  // handle = await createEmptyFile('write_fails_when_dir_removed.txt', dir)
-  // wfs = await handle.createWritable()
-  // await root.removeEntry('parent_dir', { recursive: true })
-  // err = await wfs.write('foo').catch(e=>e)
-  // assert(err?.name === 'NotFoundError', 'write() fails when parent directory is removed')
+  dir = await createDirectory('parent_dir', root)
+  handle = await createEmptyFile('write_fails_when_dir_removed.txt', dir)
+  wfs = await handle.createWritable()
+  await root.removeEntry('parent_dir', { recursive: true })
+  err = await wfs.write('foo').catch(e => e)
+  assert(err?.name === 'NotFoundError', 'write() fails when parent directory is removed')
 })
 
 t('truncate() fails when parent directory is removed', async root => {
   // TODO: fix me
-  // dir = await createDirectory('parent_dir', root)
-  // file_name = 'truncate_fails_when_dir_removed.txt'
-  // handle = await createEmptyFile(file_name, dir)
-  // wfs = await handle.createWritable()
-  // await root.removeEntry('parent_dir', { recursive: true })
-  // err = await wfs.truncate(0).catch(e=>e)
-  // assert(err?.name === 'NotFoundError', 'truncate() fails when parent directory is removed')
+  dir = await createDirectory('parent_dir', root)
+  file_name = 'truncate_fails_when_dir_removed.txt'
+  handle = await createEmptyFile(file_name, dir)
+  wfs = await handle.createWritable()
+  await root.removeEntry('parent_dir', { recursive: true })
+  err = await wfs.truncate(0).catch(e => e)
+  assert(err?.name === 'NotFoundError', 'truncate() fails when parent directory is removed')
 })
+*/
 
 t('createWritable({keepExistingData: true}): atomic writable file stream initialized with source contents', async root => {
   handle = await createFileWithContents('atomic_file_is_copied.txt', 'fooks', root)
@@ -777,15 +789,24 @@ t('createWritable({keepExistingData: true}): atomic writable file stream initial
   assert(await getFileSize(handle) === 5)
 })
 
-t('createWritable({keepExistingData: false}): atomic writable file stream initialized with empty file', async root => {
-  // TODO: fix me
-  // handle = await createFileWithContents('atomic_file_is_not_copied.txt', 'very long string', root)
-  // wfs = await handle.createWritable({ keepExistingData: false })
-  // await wfs.write('bar')
-  // assert(await getFileContents(handle) === 'very long string')
-  // await wfs.close()
-  // assert(await getFileContents(handle) === 'bar')
-  // assert(await getFileSize(handle) === 3)
+// TODO: fix me
+// t('createWritable({keepExistingData: false}): atomic writable file stream initialized with empty file', async root => {
+//   handle = await createFileWithContents('atomic_file_is_not_copied.txt', 'very long string', root)
+//   wfs = await handle.createWritable({ keepExistingData: false })
+//   await wfs.write('bar')
+//   assert(await getFileContents(handle) === 'very long string')
+//   await wfs.close()
+//   assert(await getFileContents(handle) === 'bar')
+//   assert(await getFileSize(handle) === 3)
+// })
+
+t('createWritable({keepExistingData: false}) removes previous data', async root => {
+  handle = await createFileWithContents('atomic_file_is_not_copied.txt', 'very long string', root)
+  wfs = await handle.createWritable({ keepExistingData: false })
+  await wfs.write('bar')
+  await wfs.close()
+  assert(await getFileContents(handle) === 'bar')
+  assert(await getFileSize(handle) === 3)
 })
 
 t('cursor position: truncate size > offset', async root => {

@@ -97,6 +97,8 @@ class Sink {
           : reject(new DOMException(...GONE))
       }
       tx.oncomplete = () => resolve()
+      tx.onerror = reject
+      tx.onabort = reject
     })
   }
 }
@@ -117,21 +119,24 @@ class FileHandle {
   }
 
   /** @param {FileHandle} other */
-  isSameEntry (other) {
+  async isSameEntry (other) {
     return this._id === other._id
   }
 
   async getFile () {
     /** @type {File} */
-    const file = await new Promise(resolve => {
-      store(this._db)[1].get(this._id).onsuccess = evt => resolve(evt.target.result)
+    const file = await new Promise((resolve, reject) => {
+      const req = store(this._db)[1].get(this._id)
+      req.onsuccess = evt => resolve(evt.target.result)
+      req.onerror = evt => reject(evt.target.error)
     })
     if (!file) throw new DOMException(...GONE)
     return file
   }
 
   async createWritable (opts) {
-    const file = await this.getFile()
+    let file = await this.getFile() // Used directly to test existences
+    file = opts.keepExistingData ? file : new File([], this.name)
     return new Sink(this._db, this._id, file.size, file)
   }
 }
@@ -179,6 +184,7 @@ class FolderHandle {
     this.writable = true
   }
 
+  /** @returns {AsyncGenerator<[string, FileHandle | FolderHandle]>} */
   async * entries () {
     const entries = await new Promise(resolve => {
       store(this._db)[1].get(this._id).onsuccess = evt => resolve(evt.target.result)

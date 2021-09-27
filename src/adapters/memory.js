@@ -7,13 +7,18 @@ const Blob = globalThis.Blob || await import('fetch-blob').then(m => m.Blob)
 const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX, SECURITY, DISALLOWED } = errors
 
 export class Sink {
-  /** @param {FileHandle} fileHandle */
-  constructor (fileHandle) {
+
+  /**
+   * @param {FileHandle} fileHandle
+   * @param {File} file
+   */
+  constructor (fileHandle, file) {
     this.fileHandle = fileHandle
-    this.file = fileHandle.file
-    this.size = fileHandle.file.size
+    this.file = file
+    this.size = file.size
     this.position = 0
   }
+
   write (chunk) {
     let file = this.file
 
@@ -86,8 +91,8 @@ export class Sink {
     this.file = blob
   }
   close () {
-    if (this.fileHandle.deleted) throw new DOMException(...GONE)
-    this.fileHandle.file = this.file
+    if (this.fileHandle._deleted) throw new DOMException(...GONE)
+    this.fileHandle._file = this.file
     this.file =
     this.position =
     this.size = null
@@ -99,32 +104,37 @@ export class Sink {
 
 export class FileHandle {
   constructor (name = '', file = new File([], name), writable = true) {
-    this.file = file
+    this._file = file
     this.name = name
     this.kind = 'file'
-    this.deleted = false
+    this._deleted = false
     this.writable = writable
     this.readable = true
   }
 
-  getFile () {
-    if (this.deleted) throw new DOMException(...GONE)
-    return this.file
+  async getFile () {
+    if (this._deleted) throw new DOMException(...GONE)
+    return this._file
   }
 
-  createWritable (opts) {
+  async createWritable (opts) {
     if (!this.writable) throw new DOMException(...DISALLOWED)
-    if (this.deleted) throw new DOMException(...GONE)
-    return new Sink(this)
+    if (this._deleted) throw new DOMException(...GONE)
+
+    const file = opts.keepExistingData
+      ? await this.getFile()
+      : new File([], this.name)
+
+    return new Sink(this, file)
   }
 
-  isSameEntry (other) {
+  async isSameEntry (other) {
     return this === other
   }
 
-  destroy () {
-    this.deleted = true
-    this.file = null
+  async _destroy () {
+    this._deleted = true
+    this._file = null
   }
 }
 
@@ -134,29 +144,29 @@ export class FolderHandle {
   constructor (name, writable = true) {
     this.name = name
     this.kind = 'directory'
-    this.deleted = false
+    this._deleted = false
     /** @type {Object.<string, (FolderHandle|FileHandle)>} */
     this._entries = {}
     this.writable = writable
     this.readable = true
   }
 
+  /** @returns {AsyncGenerator<[string, FileHandle | FolderHandle]>} */
   async * entries () {
-    if (this.deleted) throw new DOMException(...GONE)
+    if (this._deleted) throw new DOMException(...GONE)
     yield* Object.entries(this._entries)
   }
 
-  isSameEntry (other) {
+  async isSameEntry (other) {
     return this === other
   }
-
 
   /**
    * @param {string} name
    * @param {{ create: boolean; }} opts
    */
-  getDirectoryHandle (name, opts) {
-    if (this.deleted) throw new DOMException(...GONE)
+  async getDirectoryHandle (name, opts) {
+    if (this._deleted) throw new DOMException(...GONE)
     const entry = this._entries[name]
     if (entry) { // entry exist
       if (entry instanceof FileHandle) {
@@ -177,7 +187,7 @@ export class FolderHandle {
    * @param {string} name
    * @param {{ create: boolean; }} opts
    */
-  getFileHandle (name, opts) {
+  async getFileHandle (name, opts) {
     const entry = this._entries[name]
     const isFile = entry instanceof FileHandle
     if (entry && isFile) return entry
@@ -188,23 +198,23 @@ export class FolderHandle {
     }
   }
 
-  removeEntry (name, opts) {
+  async removeEntry (name, opts) {
     const entry = this._entries[name]
     if (!entry) throw new DOMException(...GONE)
-    entry.destroy(opts.recursive)
+    await entry._destroy(opts.recursive)
     delete this._entries[name]
   }
 
-  destroy (recursive) {
+  async _destroy (recursive) {
     for (let x of Object.values(this._entries)) {
       if (!recursive) throw new DOMException(...MOD_ERR)
-      x.destroy(recursive)
+      await x._destroy(recursive)
     }
     this._entries = {}
-    this.deleted = true
+    this._deleted = true
   }
 }
 
 const fs = new FolderHandle('')
 
-export default opts => fs
+export default () => fs
