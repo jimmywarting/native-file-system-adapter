@@ -119,12 +119,17 @@ export class FileHandle {
   }
 
   async createWritable (opts) {
-    return new Sink(this._cache, this.path, await this.getFile())
-    // let p, rs
-    // p = new Promise(resolve => rs = resolve)
-    // const { readable, writable } = new TransformStream(new Sink(p))
-    // this._cache.put(this.path, new Response(readable, FILE())).then(rs)
-    // return writable.getWriter()
+    const [r] = await this._cache.keys(this.path)
+    if (!r) throw new DOMException(...GONE)
+
+    return new Sink(
+      this._cache,
+      this.path,
+      opts.keepExistingData
+        ? await this.getFile()
+        : new File([], this.name
+      )
+    )
   }
 }
 
