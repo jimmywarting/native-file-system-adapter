@@ -823,20 +823,12 @@ t('commands are queued', async root => {
   assert(await getFileSize(handle) === 9)
 })
 
-t('queryPermission(writable=false) returns granted', async root => {
-  assert(await root.queryPermission({ writable: false }) === 'granted')
+t('queryPermission({ mode: read }) returns granted', async root => {
+  assert(await root.queryPermission({ mode: 'read' }) === 'granted')
 })
 
-t('queryPermission(writable=true) returns granted', async root => {
-  assert(await root.queryPermission({ writable: false }) === 'granted')
-})
-
-t('queryPermission(readable=true) returns granted', async root => {
-  assert(await root.queryPermission({ writable: false }) === 'granted')
-})
-
-t('queryPermission(readable=false) returns granted', async root => {
-  assert(await root.queryPermission({ writable: false }) === 'granted')
+t('queryPermission({ mode: readwrite }) returns granted', async root => {
+  assert(await root.queryPermission({ mode: 'readwrite' }) === 'granted')
 })
 
 t('isSameEntry for identical directory handles returns true', async root => {
