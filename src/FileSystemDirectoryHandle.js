@@ -63,6 +63,38 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
     return this[kAdapter].removeEntry(name, options)
   }
 
+  async resolve (possibleDescendant) {
+    if (await possibleDescendant.isSameEntry(this)) {
+      return []
+    }
+
+    const openSet = [{ handle: this, path: [] }]
+
+    while (openSet.length) {
+      let { handle: current, path } = openSet.pop()
+      for await (const entry of current.values()) {
+        if (await entry.isSameEntry(possibleDescendant)) {
+          return [...path, entry.name]
+        }
+        if (entry.kind === 'directory') {
+          openSet.push({ handle: entry, path: [...path, entry.name] })
+        }
+      }
+    }
+
+    return null
+  }
+
+  async * keys () {
+    for await (const [name] of this[kAdapter].entries())
+      yield name
+  }
+
+  async * values () {
+    for await (const [_, entry] of this)
+      yield entry
+  }
+
   [Symbol.asyncIterator]() {
     return this.entries()
   }

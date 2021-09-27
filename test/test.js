@@ -280,6 +280,40 @@ t('getFile() returns last modified time', async root => {
   assert(first_mtime < second_mtime)
 })
 
+t('resolve() returns relative path as array for existing dir descendant', async root => {
+  const first_subDir_name = 'first-subdir-name'
+  const first_subDir = await createDirectory(first_subDir_name, root)
+  const second_subDir_name = 'second-subdir-name'
+  const second_subDir = await createDirectory(second_subDir_name, first_subDir)
+  const resolvedPath = await root.resolve(second_subDir)
+  arrayEqual(resolvedPath, [first_subDir_name, second_subDir_name])
+})
+
+t('resolve() returns relative path as array for existing file descendant', async root => {
+  const subDirName = 'subdir-name'
+  const subdir = await createDirectory(subDirName, root)
+  const fileName = 'empty-file.txt'
+  const emptyFile = await createEmptyFile(fileName, subdir)
+  const resolvedPath = await root.resolve(emptyFile)
+  arrayEqual(resolvedPath, [subDirName, fileName])
+})
+
+t('resolve() returns empty array when itself passed as arg', async root => {
+  const first_subDir_name = 'first-subdir-name'
+  const first_subDir = await createDirectory(first_subDir_name, root)
+  const resolvedPath = await first_subDir.resolve(first_subDir)
+  arrayEqual(resolvedPath, [])
+})
+
+t('resolve() returns null for non-existing descendant', async root => {
+  const first_subDir_name = 'first-subdir-name'
+  const first_subDir = await createDirectory(first_subDir_name, root)
+  const second_subDir_name = 'second-subdir-name'
+  const second_subDir = await createDirectory(second_subDir_name, root)
+  const resolvedPath = await first_subDir.resolve(second_subDir)
+  arrayEqual(resolvedPath, null)
+})
+
 t('can be piped to with a string', async root => {
   handle = await createEmptyFile('foo_string.txt', root)
   wfs = await handle.createWritable()
