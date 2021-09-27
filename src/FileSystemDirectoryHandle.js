@@ -21,6 +21,7 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
   async getDirectoryHandle (name, options = {}) {
     if (name === '') throw new TypeError(`Name can't be an empty string.`)
     if (name === '.' || name === '..' || name.includes('/')) throw new TypeError(`Name contains invalid characters.`)
+    options.create = !!options.create
     return new FileSystemDirectoryHandle(await this[kAdapter].getDirectoryHandle(name, options))
   }
 
