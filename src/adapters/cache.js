@@ -248,8 +248,7 @@ export class FolderHandle {
   }
 }
 
-export default async function (opts = {}) {
-  await caches.delete('sandboxed-fs')
+export default async function () {
   const cache = await caches.open('sandboxed-fs')
   if (!await cache.match('/')) await cache.put('/', new Response('{}', DIR))
   return new FolderHandle(location.origin + '/', cache)
