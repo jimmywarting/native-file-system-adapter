@@ -1,6 +1,6 @@
 {
   "name": "native-file-system-adapter",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "description": "Native File System API",
   "main": "src/es6.js",
   "module": "./src/es6.js",
@@ -12,7 +12,7 @@
     "test": "exit 0",
     "test:browser": "php -S localhost:4444 & open http://localhost:4444/example/test.html",
     "test:node": "node test/test-node.js",
-    "test:deno": "deno run --allow-read --allow-net test/test-deno.js",
+    "test:deno": "deno run --allow-read --allow-write --allow-net test/test-deno.js",
     "build": "rm -rf dist && rollup -c rollup.config.js"
   },
   "repository": {
