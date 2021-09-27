@@ -116,11 +116,13 @@ export class FileHandle {
     return this.#path
   }
 
-  async createWritable () {
-    const fileHandle = await Deno.open(this.#path, {write: true}).catch(err => {
+  /** @param {{ keepExistingData: any; }} opts */
+  async createWritable (opts) {
+    const fileHandle = await Deno.open(this.#path, { write: true, truncate: !opts.keepExistingData }).catch(err => {
       if (err.name === 'NotFound') throw new DOMException(...GONE)
       throw err
     })
+
     const { size } = await fileHandle.stat()
     return new Sink(fileHandle, size)
   }

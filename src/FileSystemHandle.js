@@ -18,6 +18,7 @@ class FileSystemHandle {
 
   async queryPermission ({mode = 'read'} = {}) {
     const handle = this[kAdapter]
+
     if (handle.queryPermission) {
       return handle.queryPermission({mode})
     }
