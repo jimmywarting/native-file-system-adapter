@@ -1,8 +1,7 @@
-/* global globalThis */
-
 /** @type {typeof WritableStream} */
 const ws = globalThis.WritableStream || await import('https://cdn.jsdelivr.net/npm/web-streams-polyfill@3/dist/ponyfill.es2018.mjs').then(r => r.WritableStream).catch(() => import('web-streams-polyfill').then(r => r.WritableStream))
 
+// TODO: add types for ws
 class FileSystemWritableFileStream extends ws {
   constructor (...args) {
     super(...args)
@@ -14,6 +13,7 @@ class FileSystemWritableFileStream extends ws {
     /** @private */
     this._closed = false
   }
+
   close () {
     this._closed = true
     const w = this.getWriter()
