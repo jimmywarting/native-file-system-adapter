@@ -12,7 +12,7 @@
     "test": "exit 0",
     "test:browser": "php -S localhost:4444 & open http://localhost:4444/example/test.html",
     "test:node": "node test/test-node.js",
-    "test:deno": "deno run --allow-read test/test-deno.js",
+    "test:deno": "deno run --allow-read --allow-net test/test-deno.js",
     "build": "rm -rf dist && rollup -c rollup.config.js"
   },
   "repository": {
