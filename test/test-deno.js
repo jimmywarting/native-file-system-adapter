@@ -19,6 +19,8 @@ async function test (fs, step, root) {
 }
 
 async function start () {
+  Deno.mkdirSync('testfolder', { recursive: true })
+
   const root = await getOriginPrivateDirectory(import('../src/adapters/deno.js'), './testfolder')
   const memory = await getOriginPrivateDirectory(import('../src/adapters/memory.js'))
 
