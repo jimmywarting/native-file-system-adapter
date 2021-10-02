@@ -29,36 +29,35 @@ export async function fromDataTransfer (entries) {
   return new fs.FileSystemDirectoryHandle(folder)
 }
 
-export async function fromInput (input) {
+export async function getDirHandlesFromInput (input) {
   const { FolderHandle, FileHandle } = await import('./adapters/memory.js')
-  const dir = await import('./FileSystemDirectoryHandle.js')
-  const file = await import('./FileSystemFileHandle.js')
-  const FileSystemDirectoryHandle = dir.default
-  const FileSystemFileHandle = file.default
+  const { FileSystemDirectoryHandle } = await import('./FileSystemDirectoryHandle.js')
 
-  const files = [...input.files]
-  if (input.webkitdirectory) {
-    const rootName = files[0].webkitRelativePath.split('/', 1)[0]
-    const root = new FolderHandle(rootName, false)
-    files.forEach(file => {
-      const path = file.webkitRelativePath.split('/')
-      path.shift()
-      const name = path.pop()
-      const dir = path.reduce((dir, path) => {
-        if (!dir._entries[path]) dir._entries[path] = new FolderHandle(path, false)
-        return dir._entries[path]
-      }, root)
-      dir._entries[name] = new FileHandle(file.name, file, false)
-    })
-    return new FileSystemDirectoryHandle(root)
-  } else {
-    const files = Array.from(input.files).map(file =>
-      new FileSystemFileHandle(new FileHandle(file.name, file, false))
-    )
-    if (input.multiple) {
-      return files
-    } else {
-      return files[0]
-    }
-  }
+  const files = Array.from(input.files)
+  const rootName = files[0].webkitRelativePath.split('/', 1)[0]
+  const root = new FolderHandle(rootName, false)
+
+  files.forEach(file => {
+    const path = file.webkitRelativePath.split('/')
+    path.shift()
+    const name = path.pop()
+
+    const dir = path.reduce((dir, path) => {
+      if (!dir._entries[path]) dir._entries[path] = new FolderHandle(path, false)
+      return dir._entries[path]
+    }, root)
+
+    dir._entries[name] = new FileHandle(file.name, file, false)
+  })
+
+  return new FileSystemDirectoryHandle(root)
+}
+
+export async function getFileHandlesFromInput (input) {
+  const { FileHandle } = await import('./adapters/memory.js')
+  const { FileSystemFileHandle } = await import('./FileSystemFileHandle.js')
+
+  return Array.from(input.files).map(file =>
+    new FileSystemFileHandle(new FileHandle(file.name, file, false))
+  )
 }
