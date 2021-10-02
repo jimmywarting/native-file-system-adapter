@@ -1,6 +1,6 @@
-const def = {
-  accepts: []
-}
+/** @typedef {import('./FileSystemFileHandle.js').default} FileSystemFileHandle */
+
+const def = { accepts: [] }
 const native = globalThis.showOpenFilePicker
 
 /**
@@ -9,7 +9,7 @@ const native = globalThis.showOpenFilePicker
  * @param {boolean} [options.excludeAcceptAllOption=false] Prevent user for selecting any
  * @param {Object[]} [options.accepts] Files you want to accept
  * @param {boolean} [options._preferPolyfill] If you rather want to use the polyfill instead of the native
- * @returns Promise<FileSystemDirectoryHandle>
+ * @returns {Promise<FileSystemFileHandle[]>}
  */
 async function showOpenFilePicker (options = {}) {
   const opts = { ...def, ...options }
@@ -35,16 +35,15 @@ async function showOpenFilePicker (options = {}) {
   input.style.left = '-100000px'
   document.body.appendChild(input)
 
-  return new Promise(resolve => {
-    // Lazy load while the user is choosing the directory
-    const p = import('./util.js').then(m => m.fromInput)
+  // Lazy load while the user is choosing the directory
+  const p = import('./util.js')
 
-    input.addEventListener('change', () => {
-      resolve(p.then(fn => fn(input)))
-    })
-
+  await new Promise(resolve => {
+    input.addEventListener('change', resolve)
     input.click()
   })
+
+  return p.then(m => m.getFileHandlesFromInput(input))
 }
 
 export default showOpenFilePicker
