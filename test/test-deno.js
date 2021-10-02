@@ -11,10 +11,9 @@ async function test (fs, step, root) {
     await cleanupSandboxedFileSystem(root)
     await step.fn(root)
     console.log(`[OK]: ${fs} ${step.desc}`)
-    return true
   } catch (err) {
     console.log(`[ERR]: ${fs} ${step.desc}`)
-    return false
+    return true
   }
 }
 
