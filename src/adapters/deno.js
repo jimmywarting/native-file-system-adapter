@@ -116,7 +116,7 @@ export class FileHandle {
     return this.#path
   }
 
-  /** @param {{ keepExistingData: any; }} opts */
+  /** @param {{ keepExistingData: boolean; }} opts */
   async createWritable (opts) {
     const fileHandle = await Deno.open(this.#path, { write: true, truncate: !opts.keepExistingData }).catch(err => {
       if (err.name === 'NotFound') throw new DOMException(...GONE)
