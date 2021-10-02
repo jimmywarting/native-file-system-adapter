@@ -112,8 +112,9 @@ export class FileHandle {
     return this._path
   }
 
-  async createWritable () {
-    const fileHandle = await fs.open(this._path, 'r+').catch(err => {
+  /** @param {{ keepExistingData: boolean; }} opts */
+  async createWritable (opts) {
+    const fileHandle = await fs.open(this._path, opts.keepExistingData ? 'r+' : 'w+').catch(err => {
       if (err.code === 'ENOENT') throw new DOMException(...GONE)
       throw err
     })
