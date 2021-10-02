@@ -1,3 +1,5 @@
+/** @typedef {import('./FileSystemFileHandle.js').default} FileSystemFileHandle */
+
 const native = globalThis.showSaveFilePicker
 
 /**
@@ -7,7 +9,7 @@ const native = globalThis.showSaveFilePicker
  * @param {string} [options.suggestedName] the name to fall back to when using polyfill
  * @param {string} [options._name] the name to fall back to when using polyfill
  * @param {boolean} [options._preferPolyfill] If you rather want to use the polyfill instead of the native
- * @returns Promise<FileSystemDirectoryHandle>
+ * @return {Promise<FileSystemFileHandle>}
  */
 async function showSaveFilePicker (options = {}) {
   if (native && !options._preferPolyfill) {
@@ -19,7 +21,7 @@ async function showSaveFilePicker (options = {}) {
     options.suggestedName = options._name
   }
 
-  const FileSystemFileHandle = await import('./FileSystemFileHandle.js').then(d => d.default)
+  const { FileSystemFileHandle } = await import('./FileSystemFileHandle.js')
   const { FileHandle } = await import('./adapters/downloader.js')
   return new FileSystemFileHandle(new FileHandle(options.suggestedName))
 }

@@ -1,6 +1,4 @@
-/* global DataTransfer, DataTransferItem */
-
-import FileSystemDirectoryHandle from './FileSystemDirectoryHandle.js'
+/** @typedef {import('./FileSystemDirectoryHandle.js').default} FileSystemDirectoryHandle */
 
 if (globalThis.DataTransferItem && !DataTransferItem.prototype.getAsFileSystemHandle) {
   DataTransferItem.prototype.getAsFileSystemHandle = async function () {
@@ -34,6 +32,7 @@ async function getOriginPrivateDirectory (driver, options = {}) {
   if (!driver) {
     return globalThis.navigator?.storage?.getDirectory() || globalThis.getOriginPrivateDirectory()
   }
+  const {FileSystemDirectoryHandle} = await import('./FileSystemDirectoryHandle.js')
   const module = await driver
   const sandbox = module.default ? await module.default(options) : module(options)
   return new FileSystemDirectoryHandle(sandbox)

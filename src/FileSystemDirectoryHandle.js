@@ -1,5 +1,4 @@
 import FileSystemHandle from './FileSystemHandle.js'
-import FileSystemFileHandle from './FileSystemFileHandle.js'
 
 const kAdapter = Symbol('adapter')
 
@@ -25,14 +24,17 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
     return new FileSystemDirectoryHandle(await this[kAdapter].getDirectoryHandle(name, options))
   }
 
-  /** @returns {AsyncGenerator<[string, FileSystemHandle]>} */
+  /** @returns {AsyncGenerator<[string, FileSystemHandle | FileSystemDirectoryHandle]>} */
   async * entries () {
+    const {FileSystemFileHandle} = await import('./FileSystemFileHandle.js')
+
     for await (const [_, entry] of this[kAdapter].entries())
       yield [entry.name, entry.kind === 'file' ? new FileSystemFileHandle(entry) : new FileSystemDirectoryHandle(entry)]
   }
 
   /** @deprecated use .entries() instead */
   async * getEntries() {
+    const {FileSystemFileHandle} = await import('./FileSystemFileHandle.js')
     console.warn('deprecated, use .entries() instead')
     for await (let entry of this[kAdapter].entries())
       yield entry.kind === 'file' ? new FileSystemFileHandle(entry) : new FileSystemDirectoryHandle(entry)
@@ -42,9 +44,9 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
    * @param {string} name Name of the file
    * @param {object} [options]
    * @param {boolean} [options.create] create the file if don't exist
-   * @returns {Promise<FileSystemFileHandle>}
    */
   async getFileHandle (name, options = {}) {
+    const {FileSystemFileHandle} = await import('./FileSystemFileHandle.js')
     if (name === '') throw new TypeError(`Name can't be an empty string.`)
     if (name === '.' || name === '..' || name.includes('/')) throw new TypeError(`Name contains invalid characters.`)
     options.create = !!options.create
@@ -63,6 +65,7 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
     return this[kAdapter].removeEntry(name, options)
   }
 
+  // TODO: jsdoc
   async resolve (possibleDescendant) {
     if (await possibleDescendant.isSameEntry(this)) {
       return []

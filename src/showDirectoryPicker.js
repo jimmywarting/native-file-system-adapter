@@ -1,9 +1,11 @@
+/** @typedef {import('./FileSystemDirectoryHandle.js').default} FileSystemDirectoryHandle */
+
 const native = globalThis.showDirectoryPicker
 
 /**
  * @param {Object} [options]
  * @param {boolean} [options._preferPolyfill] If you rather want to use the polyfill instead of the native
- * @returns Promise<FileSystemDirectoryHandle>
+ * @returns {Promise<FileSystemDirectoryHandle>}
  */
 async function showDirectoryPicker (options = {}) {
   if (native && !options._preferPolyfill) {
@@ -26,18 +28,15 @@ async function showDirectoryPicker (options = {}) {
 
   input.webkitdirectory = true
 
+  // Lazy load while the user is choosing the directory
+  const p = import('./util.js')
 
-  return new Promise(resolve => {
-    // Lazy load while the user is choosing the directory
-    const p = import('./util.js').then(m => m.fromInput)
-
-    input.addEventListener('change', () => {
-      resolve(p.then(fn => fn(input)))
-      document.body.removeChild(input)
-    })
-
+  await new Promise(resolve => {
+    input.addEventListener('change', resolve)
     input.click()
   })
+
+  return p.then(mod => mod.getDirHandlesFromInput(input))
 }
 
 export default showDirectoryPicker
