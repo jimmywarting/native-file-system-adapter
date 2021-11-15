@@ -11,5 +11,5 @@
     "lib": ["es2019", "dom"],
     "outDir": "./types/"
   },
-  "include": ["src/*.js"]
+  "include": ["mod.js"]
 }
