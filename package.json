@@ -13,6 +13,7 @@
     "test:browser": "php -S localhost:4444 & open http://localhost:4444/example/test.html",
     "test:node": "node test/test-node.js",
     "test:deno": "deno run --allow-read --allow-write --allow-net test/test-deno.js",
+    "test:wpt-in-deno": "deno run --allow-read --allow-write --allow-net test/test-wpt-in-deno.js",
     "build": "rm -rf dist && rollup -c rollup.config.js"
   },
   "repository": {
