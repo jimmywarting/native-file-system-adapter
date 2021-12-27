@@ -167,7 +167,7 @@ const blob = {
 
 await blob.stream().pipeTo(fileHandle.createWritable())
 // or
-var writer = fileHandle.getWritable()
+const writer = await fileHandle.createWritable()
 await writer.write(blob)
 await writer.close()
 ```
