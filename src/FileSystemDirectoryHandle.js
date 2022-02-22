@@ -18,10 +18,15 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
    * @returns {Promise<FileSystemDirectoryHandle>}
    */
   async getDirectoryHandle (name, options = {}) {
-    if (name === '') throw new TypeError(`Name can't be an empty string.`)
-    if (name === '.' || name === '..' || name.includes('/')) throw new TypeError(`Name contains invalid characters.`)
+    if (name === '') {
+      throw new TypeError(`Name can't be an empty string.`)
+    }
+    if (name === '.' || name === '..' || name.includes('/')) {
+      throw new TypeError(`Name contains invalid characters.`)
+    }
     options.create = !!options.create
-    return new FileSystemDirectoryHandle(await this[kAdapter].getDirectoryHandle(name, options))
+    const handle = await this[kAdapter].getDirectoryHandle(name, options)
+    return new FileSystemDirectoryHandle(handle)
   }
 
   /** @returns {AsyncGenerator<[string, FileSystemHandle | FileSystemDirectoryHandle]>} */
@@ -29,7 +34,9 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
     const {FileSystemFileHandle} = await import('./FileSystemFileHandle.js')
 
     for await (const [_, entry] of this[kAdapter].entries())
-      yield [entry.name, entry.kind === 'file' ? new FileSystemFileHandle(entry) : new FileSystemDirectoryHandle(entry)]
+      yield [entry.name, entry.kind === 'file'
+        ? new FileSystemFileHandle(entry)
+        : new FileSystemDirectoryHandle(entry)]
   }
 
   /** @deprecated use .entries() instead */
@@ -37,7 +44,9 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
     const {FileSystemFileHandle} = await import('./FileSystemFileHandle.js')
     console.warn('deprecated, use .entries() instead')
     for await (let entry of this[kAdapter].entries())
-      yield entry.kind === 'file' ? new FileSystemFileHandle(entry) : new FileSystemDirectoryHandle(entry)
+      yield entry.kind === 'file'
+        ? new FileSystemFileHandle(entry)
+        : new FileSystemDirectoryHandle(entry)
   }
 
   /**
@@ -48,9 +57,12 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
   async getFileHandle (name, options = {}) {
     const {FileSystemFileHandle} = await import('./FileSystemFileHandle.js')
     if (name === '') throw new TypeError(`Name can't be an empty string.`)
-    if (name === '.' || name === '..' || name.includes('/')) throw new TypeError(`Name contains invalid characters.`)
+    if (name === '.' || name === '..' || name.includes('/')) {
+      throw new TypeError(`Name contains invalid characters.`)
+    }
     options.create = !!options.create
-    return new FileSystemFileHandle(await this[kAdapter].getFileHandle(name, options))
+    const handle = await this[kAdapter].getFileHandle(name, options)
+    return new FileSystemFileHandle(handle)
   }
 
   /**
@@ -59,13 +71,16 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
    * @param {boolean} [options.recursive]
    */
   async removeEntry (name, options = {}) {
-    if (name === '') throw new TypeError(`Name can't be an empty string.`)
-    if (name === '.' || name === '..' || name.includes('/')) throw new TypeError(`Name contains invalid characters.`)
+    if (name === '') {
+      throw new TypeError(`Name can't be an empty string.`)
+    }
+    if (name === '.' || name === '..' || name.includes('/')) {
+      throw new TypeError(`Name contains invalid characters.`)
+    }
     options.recursive = !!options.recursive // cuz node's fs.rm require boolean
     return this[kAdapter].removeEntry(name, options)
   }
 
-  // TODO: jsdoc
   async resolve (possibleDescendant) {
     if (await possibleDescendant.isSameEntry(this)) {
       return []

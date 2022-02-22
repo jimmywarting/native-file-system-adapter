@@ -186,9 +186,12 @@ class FolderHandle {
 
   /** @returns {AsyncGenerator<[string, FileHandle | FolderHandle]>} */
   async * entries () {
-    const entries = await new Promise(resolve => {
-      store(this._db)[1].get(this._id).onsuccess = evt => resolve(evt.target.result)
+    const req = store(this._db)[1].get(this._id);
+    await new Promise((rs, rj) => {
+      req.onsuccess = () => rs()
+      req.onerror = () => rj(req.error)
     })
+    const entries = req.result
     if (!entries) throw new DOMException(...GONE)
     for (const [name, [id, isFile]] of Object.entries(entries)) {
       yield [name, isFile

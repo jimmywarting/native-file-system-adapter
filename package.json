@@ -15,7 +15,7 @@
     "test:deno": "deno run --allow-read --allow-write --allow-net test/test-deno.js",
     "test:wpt-in-deno": "deno run --allow-read --allow-write --allow-net test/test-wpt-in-deno.js",
     "build": "rm -rf dist && rollup -c rollup.config.js",
-    "prepublishOnly": "rm -rf types && tsc"
+    "prepublishOnly": "rm -rf types && tsc -p jsconfig.json"
   },
   "repository": {
     "type": "git",
@@ -55,15 +55,6 @@
     "fetch-blob": "^3.1.4",
     "node-domexception": "^1.0.0"
   },
-  "devDependencies": {
-    "@types/filesystem": "^0.0.30",
-    "rollup": "^2.51.1",
-    "rollup-plugin-multi-input": "^1.3.1",
-    "rollup-plugin-terser": "^7.0.2",
-    "standard": "^16.0.3",
-    "tape": "^5.2.2",
-    "typescript": "^4.4.4"
-  },
   "standard": {
     "globals": [
       "File",
@@ -87,5 +78,14 @@
       "type": "paypal",
       "url": "https://paypal.me/jimmywarting"
     }
-  ]
+  ],
+  "devDependencies": {
+    "@types/filesystem": "^0.0.32",
+    "rollup": "^2.67.3",
+    "rollup-plugin-multi-input": "^1.3.1",
+    "rollup-plugin-terser": "^7.0.2",
+    "standard": "^16.0.4",
+    "tape": "^5.5.2",
+    "typescript": "^4.5.5"
+  }
 }

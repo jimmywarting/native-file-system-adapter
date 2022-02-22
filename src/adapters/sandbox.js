@@ -81,6 +81,9 @@ export class FileHandle {
     return this.file.name
   }
 
+  /**
+   * @param {{ file: { toURL: () => string; }; }} other
+   */
   isSameEntry (other) {
     return this.file.toURL() === other.file.toURL()
   }

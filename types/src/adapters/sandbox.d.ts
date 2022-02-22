@@ -5,13 +5,17 @@ export class FileHandle {
     writable: boolean;
     readable: boolean;
     get name(): string;
-    isSameEntry(other: any): boolean;
+    isSameEntry(other: {
+        file: {
+            toURL: () => string;
+        };
+    }): boolean;
     getFile(): Promise<File>;
     createWritable(opts: any): Promise<Sink>;
 }
 export class FolderHandle {
     constructor(dir: DirectoryEntry, writable?: boolean);
-    dir: DirectoryEntry;
+    dir: FileSystemDirectoryEntry;
     writable: boolean;
     readable: boolean;
     kind: string;
