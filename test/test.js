@@ -59,6 +59,7 @@ t('getDirectoryHandle(create=true) creates an empty directory', async root => {
   arrayEqual(await getSortedDirectoryEntries(root), ['non-existing-dir/'])
 })
 
+
 t('getDirectoryHandle(create=false) returns existing directories', async root => {
   const existing_handle = await root.getDirectoryHandle('dir-with-contents', { create: true })
   await createEmptyFile('test-file', existing_handle)
