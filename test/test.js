@@ -19,7 +19,7 @@ if (!globalThis.WritableStream) {
   globalThis.ReadableStream = m.ReadableStream
 }
 
-/** @type {typeof window.Blob} */
+/** @type {typeof globalThis.Blob} */
 const Blob = globalThis.Blob || await import('fetch-blob').then(m => m.Blob)
 
 const arr = []
