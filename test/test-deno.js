@@ -22,6 +22,10 @@ async function start () {
 
   const root = await getOriginPrivateDirectory(import('../src/adapters/deno.js'), './testfolder')
   const memory = await getOriginPrivateDirectory(import('../src/adapters/memory.js'))
+  // const jsdelivr = await getOriginPrivateDirectory(
+  //   import('../src/adapters/jsdelivr.js'),
+  //   'gh/warting/daily-fail@be9805460afc92be2c63a0ab4162651f1944d8cb'
+  // )
 
   let hasFailures = false
 

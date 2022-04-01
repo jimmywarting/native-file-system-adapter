@@ -34,7 +34,10 @@ async function getOriginPrivateDirectory (driver, options = {}) {
   }
   const {FileSystemDirectoryHandle} = await import('./FileSystemDirectoryHandle.js')
   const module = await driver
-  const sandbox = module.default ? await module.default(options) : module(options)
+  const sandbox = await (module.default
+    ? module.default(options)
+    : module(options)
+  )
   return new FileSystemDirectoryHandle(sandbox)
 }
 
