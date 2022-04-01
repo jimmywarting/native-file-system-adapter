@@ -26,8 +26,8 @@ class FileSystemFileHandle extends FileSystemHandle {
   /**
    * @returns {Promise<File>}
    */
-  getFile () {
-    return Promise.resolve(this[kAdapter].getFile())
+  async getFile () {
+    return this[kAdapter].getFile()
   }
 }
 
