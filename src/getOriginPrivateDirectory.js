@@ -24,11 +24,6 @@ if (globalThis.DataTransferItem && !DataTransferItem.prototype.getAsFileSystemHa
  * @return {Promise<FileSystemDirectoryHandle>}
  */
 async function getOriginPrivateDirectory (driver, options = {}) {
-  if (typeof DataTransfer === 'function' && driver instanceof DataTransfer) {
-    console.warn('deprecated getOriginPrivateDirectory(dataTransfer). Use "dt.items.getAsFileSystemHandle()"')
-    const entries = Array.from(driver.items).map(item => item.webkitGetAsEntry())
-    return import('./util.js').then(m => m.fromDataTransfer(entries))
-  }
   if (!driver) {
     return globalThis.navigator?.storage?.getDirectory() || globalThis.getOriginPrivateDirectory()
   }
