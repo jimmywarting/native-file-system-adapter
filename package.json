@@ -24,7 +24,7 @@
   "engines": {
     "node": ">=14.8.0"
   },
-  "types": "types",
+  "types": "/types/mod.d.ts",
   "keywords": [
     "filesystem",
     "file",
