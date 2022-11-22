@@ -52,9 +52,6 @@
     "fetch-blob": "^3.2.0",
     "web-streams-polyfill": "^3.1.1"
   },
-  "dependencies": {
-    "node-domexception": "^1.0.0"
-  },
   "standard": {
     "globals": [
       "File",

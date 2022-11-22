@@ -1,6 +1,5 @@
 import fs from 'node:fs/promises'
 import { join } from 'node:path'
-import 'node-domexception'
 import { errors } from '../util.js'
 
 const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX } = errors
