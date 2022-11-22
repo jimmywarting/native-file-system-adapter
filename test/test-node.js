@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, rmdirSync } from 'node:fs'
-import { getOriginPrivateDirectory } from '../src/es6.js'
+import config from '../src/config.js'
 import steps from './test.js'
+import File from 'fetch-blob/file.js'
+import { getOriginPrivateDirectory } from '../src/es6.js'
 import { cleanupSandboxedFileSystem } from '../test/util.js'
 
 let hasFailures = false
@@ -12,6 +14,7 @@ async function test (fs, step, root) {
     console.log(`[OK]: ${fs} ${step.desc}`)
   } catch (err) {
     console.log(`[ERR]: ${fs} ${step.desc}\n\t-> ${err.message}`)
+    console.error(err.stack)
     hasFailures = true
   }
 }
@@ -21,6 +24,7 @@ async function start () {
   if (!existsSync(testFolderPath)) {
     mkdirSync(testFolderPath)
   }
+  config.File = File
   const root = await getOriginPrivateDirectory(import('../src/adapters/node.js'), './testfolder')
   const memory = await getOriginPrivateDirectory(import('../src/adapters/memory.js'))
 

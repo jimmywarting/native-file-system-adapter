@@ -1,8 +1,8 @@
-/** @type {typeof WritableStream} */
-const ws = globalThis.WritableStream || await import('https://cdn.jsdelivr.net/npm/web-streams-polyfill@3/dist/ponyfill.es2018.mjs').then(r => r.WritableStream).catch(() => import('web-streams-polyfill').then(r => r.WritableStream))
+import config from './config.js'
 
-// TODO: add types for ws
-class FileSystemWritableFileStream extends ws {
+const { WritableStream } = config
+
+class FileSystemWritableFileStream extends WritableStream {
   constructor (...args) {
     super(...args)
 
