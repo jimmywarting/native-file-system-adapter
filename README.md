@@ -33,6 +33,35 @@ It's not trying to interfere with the changing spec by using other properties th
 ( The current minium supported browser I have chosen to support is the ones that can handle import/export )<br>
 ( Some parts are lazy loaded when needed )
 
+### Updating from 2.x to 3.x
+v3 removed all top level await that conditionally loaded polyfills like
+WritableStream, DOMException, and Blob/File. considering that now all latest
+up to date env have this built in globally on `globalThis` namespace. This makes
+the file system adapter lighter for ppl who want a smaller bundle and supports
+newer engines.
+
+But if you still need to provide polyfills for older environments
+then you can provide your own polyfill and set it up with our config before any
+other script is evaluated
+
+```js
+
+import config from 'native-file-system-adapter/config.js'
+// This is the default config that you could override as needed.
+Object.assign(config, {
+  ReadableStream: globalThis.ReadableStream,
+  WritableStream: globalThis.WritableStream,
+  TransformStream: globalThis.TransformStream,
+  DOMException: globalThis.DOMException,
+  Blob: globalThis.Blob,
+  File: globalThis.File
+})
+// continue like normal.
+import xyz from 'native-file-system-adapter'
+```
+
+
+
 ### ES import in browser
 
 ```html
