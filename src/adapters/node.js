@@ -1,15 +1,29 @@
 import fs from 'node:fs/promises'
 import { join } from 'node:path'
 import 'node-domexception'
-import Blob from 'fetch-blob'
-import { fileFrom } from 'fetch-blob/from.js'
 import { errors } from '../util.js'
-// import mime from 'mime-types'
 
 const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX } = errors
 
-export class Sink {
+/**
+ * @see https://github.com/node-fetch/fetch-blob/blob/0455796ede330ecffd9eb6b9fdf206cc15f90f3e/index.js#L232
+ * @param {*} object
+ * @returns {object is Blob}
+ */
+function isBlob (object) {
+  return (
+    object &&
+    typeof object === 'object' &&
+    typeof object.constructor === 'function' &&
+    (
+      typeof object.stream === 'function' ||
+      typeof object.arrayBuffer === 'function'
+    ) &&
+    /^(Blob|File)$/.test(object[Symbol.toStringTag])
+  )
+}
 
+export class Sink {
   /**
    * @param {fs.FileHandle} fileHandle
    * @param {number} size
@@ -65,7 +79,7 @@ export class Sink {
       chunk = new Uint8Array(chunk)
     } else if (typeof chunk === 'string') {
       chunk = Buffer.from(chunk)
-    } else if (chunk instanceof Blob) {
+    } else if (isBlob(chunk)) {
       for await (const data of chunk.stream()) {
         const res = await this._fileHandle.writev([data], this._position)
         this._position += res.bytesWritten
@@ -101,6 +115,9 @@ export class FileHandle {
     await fs.stat(this._path).catch(err => {
       if (err.code === 'ENOENT') throw new DOMException(...GONE)
     })
+
+    const { fileFrom } = await import('fetch-blob/from.js')
+
     return fileFrom(this._path)
   }
 
