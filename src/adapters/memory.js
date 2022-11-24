@@ -1,9 +1,7 @@
 import { errors } from '../util.js'
-/** @type {typeof window.File} */
-const File = globalThis.File || await import('fetch-blob/file.js').then(m => m.File)
-/** @type {typeof window.Blob} */
-const Blob = globalThis.Blob || await import('fetch-blob').then(m => m.Blob)
+import config from '../config.js'
 
+const { File, Blob, DOMException } = config
 const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX, SECURITY, DISALLOWED } = errors
 
 export class Sink {

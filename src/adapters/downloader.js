@@ -1,12 +1,18 @@
 /* global Blob, DOMException, Response, MessageChannel */
 
 import { errors } from '../util.js'
+import config from '../config.js'
+
+const {
+  WritableStream,
+  TransformStream,
+  DOMException,
+  Blob
+} = config
 
 const { GONE } = errors
 // @ts-ignore
 const isSafari = /constructor/i.test(window.HTMLElement) || window.safari || window.WebKitPoint
-let TransformStream = globalThis.TransformStream
-let WritableStream = globalThis.WritableStream
 
 export class FileHandle {
   constructor (name = 'unkown') {
@@ -26,12 +32,6 @@ export class FileHandle {
    * @param {object} [options={}]
    */
   async createWritable (options = {}) {
-    if (!TransformStream) {
-      // @ts-ignore
-      const ponyfill = await import('https://cdn.jsdelivr.net/npm/web-streams-polyfill@3/dist/ponyfill.es2018.mjs')
-      TransformStream = ponyfill.TransformStream
-      WritableStream = ponyfill.WritableStream
-    }
     const sw = await navigator.serviceWorker?.getRegistration()
     const link = document.createElement('a')
     const ts = new TransformStream()
