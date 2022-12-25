@@ -43,4 +43,3 @@ export class FolderHandle {
 }
 declare function _default(): FolderHandle;
 export default _default;
-declare const File_1: typeof window.File;
