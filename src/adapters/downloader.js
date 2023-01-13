@@ -1,5 +1,3 @@
-/* global Blob, DOMException, Response, MessageChannel */
-
 import { errors } from '../util.js'
 import config from '../config.js'
 
