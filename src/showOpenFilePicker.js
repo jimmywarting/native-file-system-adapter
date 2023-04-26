@@ -30,18 +30,22 @@ async function showOpenFilePicker (options = {}) {
     .join(',')
 
   // See https://stackoverflow.com/questions/47664777/javascript-file-input-onchange-not-working-ios-safari-only
-  input.style.position = 'fixed'
-  input.style.top = '-100000px'
-  input.style.left = '-100000px'
+  Object.assign(input.style, {
+    position: 'fixed',
+    top: '-100000px',
+    left: '-100000px'
+  })
+
   document.body.appendChild(input)
 
   // Lazy load while the user is choosing the directory
   const p = import('./util.js')
 
   await new Promise(resolve => {
-    input.addEventListener('change', resolve)
+    input.addEventListener('change', resolve, { once: true })
     input.click()
   })
+  input.remove()
 
   return p.then(m => m.getFileHandlesFromInput(input))
 }
