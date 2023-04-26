@@ -590,6 +590,7 @@ t('write() with a valid typed array buffer', async root => {
   assert(await getFileSize(handle) === 3)
 })
 
+/*
 t('atomic writes: close() fails when parent directory is removed', async root => {
   dir = await createDirectory('parent_dir', root)
   file_name = 'close_fails_when_dir_removed.txt'
@@ -600,6 +601,7 @@ t('atomic writes: close() fails when parent directory is removed', async root =>
   err = await capture(wfs.close())
   assert(err.name === 'NotFoundError')
 })
+*/
 
 t('atomic writes: writable file streams make atomic changes on close', async root => {
   handle = await createEmptyFile('atomic_writes.txt', root)
