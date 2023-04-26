@@ -603,6 +603,7 @@ t('atomic writes: close() fails when parent directory is removed', async root =>
 })
 */
 
+
 t('atomic writes: writable file streams make atomic changes on close', async root => {
   handle = await createEmptyFile('atomic_writes.txt', root)
   wfs = await handle.createWritable()
@@ -617,6 +618,7 @@ t('atomic writes: writable file streams make atomic changes on close', async roo
   assert(await getFileContents(handle) === 'foox')
   assert(await getFileSize(handle) === 4)
 })
+*/
 // async () => {
 //   // 'atomic writes: writable file stream persists file on close, even if file is removed'
 //   dir = await createDirectory('parent_dir', root)
