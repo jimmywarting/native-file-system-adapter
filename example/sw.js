@@ -1,3 +1,6 @@
+// Want to remove this postMessage hack, tell them u want transferable streams:
+// https://bugs.webkit.org/show_bug.cgi?id=215485
+
 const WRITE = 0
 const PULL = 0
 const ERROR = 1
@@ -24,6 +27,10 @@ class MessagePortSource {
     this.controller = controller
   }
 
+  pull () {
+    this.port.postMessage({ type: PULL })
+  }
+
   /** @param {Error} reason */
   cancel (reason) {
     // Firefox can notify a cancel event, chrome can't
@@ -37,7 +44,6 @@ class MessagePortSource {
     // enqueue() will call pull() if needed when there's no backpressure
     if (message.type === WRITE) {
       this.controller.enqueue(message.chunk)
-      this.port.postMessage({ type: PULL })
     }
     if (message.type === ABORT) {
       this.controller.error(message.reason)

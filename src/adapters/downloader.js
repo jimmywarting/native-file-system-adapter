@@ -9,8 +9,8 @@ const {
 } = config
 
 const { GONE } = errors
-// @ts-ignore
-const isSafari = /constructor/i.test(window.HTMLElement) || window.safari || window.WebKitPoint
+// @ts-ignore - Don't match newer versions of Safari, but that's okay
+const isOldSafari = /constructor/i.test(window.HTMLElement)
 
 export class FileHandle {
   constructor (name = 'unkown') {
@@ -37,7 +37,7 @@ export class FileHandle {
 
     link.download = this.name
 
-    if (isSafari || !sw) {
+    if (isOldSafari || !sw) {
       /** @type {Blob[]} */
       let chunks = []
       ts.readable.pipeTo(new WritableStream({
@@ -92,6 +92,9 @@ export class FileHandle {
     return sink.getWriter()
   }
 }
+
+// Want to remove this postMessage hack, tell them u want transferable streams:
+// https://bugs.webkit.org/show_bug.cgi?id=215485
 
 const WRITE = 0
 const PULL = 0
