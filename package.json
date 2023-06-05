@@ -1,87 +1,28 @@
 {
-  "name": "native-file-system-adapter",
-  "version": "3.0.0",
-  "description": "Native File System API",
-  "main": "src/es6.js",
-  "module": "./src/es6.js",
-  "directories": {
-    "example": "example"
-  },
-  "type": "module",
-  "scripts": {
-    "test": "exit 0",
-    "test:browser": "php -S localhost:4444 & open http://localhost:4444/example/test.html",
-    "test:node": "node test/test-node.js",
-    "test:deno": "deno run --allow-read --allow-write --allow-net test/test-deno.js",
-    "test:wpt-in-deno": "deno run --allow-read --allow-write --allow-net test/test-wpt-in-deno.js",
-    "build": "rm -rf dist && rollup -c rollup.config.js",
-    "_prepublishOnly": "rm -rf types && tsc -p jsconfig.json"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/jimmywarting/native-file-system-adapter.git"
-  },
-  "engines": {
-    "node": ">=14.8.0"
-  },
-  "types": "types/mod.d.ts",
-  "keywords": [
-    "filesystem",
-    "file",
-    "blob",
-    "stream",
-    "fs",
-    "read",
-    "write",
-    "delete",
-    "file system access",
-    "spec"
-  ],
-  "author": "Jimmy Wärting",
+  "name": "@jcbhmr/repo",
+  "version": "1.0.0",
+  "description": "desc",
+  "keywords": [],
+  "homepage": "https://jcbhmr.github.io/repo/",
+  "bugs": "https://github.com/jcbhmr/repo/issues",
+  "repository": "github:jcbhmr/repo",
   "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/jimmywarting/native-file-system-adapter/issues"
-  },
   "contributors": [
-    {
-      "name": "Alexandru Ciuca"
-    }
+    "Jimmy Wärting <jimmy@warting.se> (http://jimmy.warting.se)",
+    "Jacob Hummer <jcbhmr@outlook.com> (https://jcbhmr.me/)"
   ],
-  "homepage": "https://github.com/jimmywarting/native-file-system-adapter#readme",
-  "optionalDependencies": {
-    "fetch-blob": "^3.2.0"
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js",
+    "./*.js": "./dist/*.js",
+    "./internal/*": null
   },
-  "standard": {
-    "globals": [
-      "File",
-      "performance",
-      "Blob",
-      "Response",
-      "ClipboardEvent",
-      "DataTransferItem",
-      "FormData",
-      "alert",
-      "ReadableStream",
-      "DataTransfer"
-    ]
+  "scripts": {
+    "build-docs": "typedoc",
+    "prepack": "tsc",
+    "start": "tsx --test --watch test/*.test.ts",
+    "pretest": "prettier --ignore-path .gitignore -w .",
+    "test": "tsc --noEmit && tsx --test test/*.test.ts"
   },
-  "funding": [
-    {
-      "type": "github",
-      "url": "https://github.com/sponsors/jimmywarting"
-    },
-    {
-      "type": "paypal",
-      "url": "https://paypal.me/jimmywarting"
-    }
-  ],
-  "devDependencies": {
-    "@types/filesystem": "^0.0.32",
-    "rollup": "^2.67.3",
-    "rollup-plugin-multi-input": "^1.3.1",
-    "rollup-plugin-terser": "^7.0.2",
-    "standard": "^16.0.4",
-    "tape": "^5.5.2",
-    "typescript": "^4.5.5"
-  }
+  "devDependencies": {}
 }
