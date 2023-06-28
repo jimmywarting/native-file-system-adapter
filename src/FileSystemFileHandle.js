@@ -110,7 +110,7 @@ if (
     const send = message => new Promise((resolve, reject) => {
       const mc = new MessageChannel()
       mc.port1.onmessage = evt => {
-        if (evt instanceof Error) reject(evt.data)
+        if (evt.data instanceof Error) reject(evt.data)
         else resolve(evt.data)
         mc.port1.close()
         mc.port2.close()
