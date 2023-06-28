@@ -3,9 +3,10 @@ import config from './config.js'
 const { WritableStream } = config
 
 class FileSystemWritableFileStream extends WritableStream {
-  constructor (...args) {
-    super(...args)
-
+  #writer
+  constructor (writer) {
+    super(writer)
+    this.#writer = writer
     // Stupid Safari hack to extend native classes
     // https://bugs.webkit.org/show_bug.cgi?id=226201
     Object.setPrototypeOf(this, FileSystemWritableFileStream.prototype)
@@ -14,7 +15,7 @@ class FileSystemWritableFileStream extends WritableStream {
     this._closed = false
   }
 
-  close () {
+  async close () {
     this._closed = true
     const w = this.getWriter()
     const p = w.close()
@@ -33,15 +34,23 @@ class FileSystemWritableFileStream extends WritableStream {
     return this.write({ type: 'truncate', size })
   }
 
+  // The write(data) method steps are:
   write (data) {
     if (this._closed) {
       return Promise.reject(new TypeError('Cannot write to a CLOSED writable stream'))
     }
 
+    // 1. Let writer be the result of getting a writer for this.
     const writer = this.getWriter()
-    const p = writer.write(data)
+
+    // 2. Let result be the result of writing a chunk to writer given data.
+    const result = writer.write(data)
+
+    // 3. Release writer.
     writer.releaseLock()
-    return p
+
+    // 4. Return result.
+    return result
   }
 }
 
@@ -58,6 +67,15 @@ Object.defineProperties(FileSystemWritableFileStream.prototype, {
   truncate: { enumerable: true },
   write: { enumerable: true }
 })
+
+// Safari safari doesn't support writable streams yet.
+if (
+  globalThis.FileSystemFileHandle &&
+  !globalThis.FileSystemFileHandle.prototype.createWritable &&
+  !globalThis.FileSystemWritableFileStream
+) {
+  globalThis.FileSystemWritableFileStream = FileSystemWritableFileStream
+}
 
 export default FileSystemWritableFileStream
 export { FileSystemWritableFileStream }

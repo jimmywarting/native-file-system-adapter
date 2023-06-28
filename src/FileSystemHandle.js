@@ -1,5 +1,9 @@
 const kAdapter = Symbol('adapter')
 
+/**
+ * @typedef {Object} FileSystemHandlePermissionDescriptor
+ * @property {('read'|'readwrite')} [mode='read']
+ */
 class FileSystemHandle {
   /** @type {FileSystemHandle} */
   [kAdapter]
@@ -16,7 +20,9 @@ class FileSystemHandle {
     this[kAdapter] = adapter
   }
 
-  async queryPermission ({mode = 'read'} = {}) {
+  /** @param {FileSystemHandlePermissionDescriptor} descriptor */
+  async queryPermission (descriptor = {}) {
+    const { mode = 'read' } = descriptor
     const handle = this[kAdapter]
 
     if (handle.queryPermission) {
@@ -78,6 +84,13 @@ Object.defineProperty(FileSystemHandle.prototype, Symbol.toStringTag, {
   enumerable: false,
   configurable: true
 })
+
+// Safari safari doesn't support writable streams yet.
+if (globalThis.FileSystemHandle) {
+  globalThis.FileSystemHandle.prototype.queryPermission ??= function (descriptor) {
+    return 'granted'
+  }
+}
 
 export default FileSystemHandle
 export { FileSystemHandle }

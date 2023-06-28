@@ -1,4 +1,7 @@
 import FileSystemHandle from './FileSystemHandle.js'
+import { errors } from './util.js'
+
+const { GONE, MOD_ERR } = errors
 
 const kAdapter = Symbol('adapter')
 
@@ -90,6 +93,7 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
 
     while (openSet.length) {
       let { handle: current, path } = openSet.pop()
+
       for await (const entry of current.values()) {
         if (await entry.isSameEntry(possibleDescendant)) {
           return [...path, entry.name]
@@ -131,6 +135,63 @@ Object.defineProperties(FileSystemDirectoryHandle.prototype, {
 	getFileHandle: { enumerable: true },
 	removeEntry: { enumerable: true }
 })
+
+if (globalThis.FileSystemDirectoryHandle) {
+  const proto = globalThis.FileSystemDirectoryHandle.prototype
+
+  proto.resolve = async function resolve (possibleDescendant) {
+    if (await possibleDescendant.isSameEntry(this)) {
+      return []
+    }
+
+    const openSet = [{ handle: this, path: [] }]
+
+    while (openSet.length) {
+      let { handle: current, path } = openSet.pop()
+
+      for await (const entry of current.values()) {
+        if (await entry.isSameEntry(possibleDescendant)) {
+          return [...path, entry.name]
+        }
+        if (entry.kind === 'directory') {
+          openSet.push({ handle: entry, path: [...path, entry.name] })
+        }
+      }
+    }
+
+    return null
+  }
+
+  // Safari allows us operate on deleted files,
+  // so we need to check if they still exist.
+  // Hope to remove this one day.
+  async function ensureDoActuallyStillExist (handle) {
+    const root = await navigator.storage.getDirectory()
+    const path = await root.resolve(handle)
+    if (path === null) { throw new DOMException(...GONE) }
+  }
+
+  const entries = proto.entries
+  proto.entries = async function * () {
+    await ensureDoActuallyStillExist(this)
+    yield * entries.call(this)
+  }
+  proto[Symbol.asyncIterator] = async function * () {
+    yield * this.entries()
+  }
+
+  const removeEntry = proto.removeEntry
+  proto.removeEntry = async function (name, options = {}) {
+    return removeEntry.call(this, name, options).catch(async err => {
+      const unknown = err instanceof DOMException && err.name === 'UnknownError'
+      if (unknown && !options.recursive) {
+        const empty = (await entries.call(this).next()).done
+        if (!empty) { throw new DOMException(...MOD_ERR) }
+      }
+      throw err
+    })
+  }
+}
 
 export default FileSystemDirectoryHandle
 export { FileSystemDirectoryHandle }
