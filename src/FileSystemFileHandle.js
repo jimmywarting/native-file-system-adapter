@@ -51,11 +51,56 @@ if (
   globalThis.FileSystemFileHandle &&
   !globalThis.FileSystemFileHandle.prototype.createWritable
 ) {
-  const workerUrl = new URL('./worker.js', import.meta.url).toString()
   const wm = new WeakMap()
+
+  let workerUrl
+
+  // Worker code that should be inlined (can't use any external functions)
+  function code () {
+    let fileHandle, handle
+
+    onmessage = async evt => {
+      const port = evt.ports[0]
+      const cmd = evt.data
+      switch (cmd.type) {
+        case 'open':
+          const file = cmd.name
+
+          let dir = await navigator.storage.getDirectory()
+
+          for (const folder of cmd.path) {
+            dir = await dir.getDirectoryHandle(folder)
+          }
+
+          fileHandle = await dir.getFileHandle(file)
+          handle = await fileHandle.createSyncAccessHandle()
+          break
+        case 'write':
+          handle.write(cmd.data, { at: cmd.position })
+          handle.flush()
+          break
+        case 'truncate':
+          handle.truncate(cmd.size)
+          break
+        case 'abort':
+        case 'close':
+          handle.close()
+          break
+      }
+
+      port.postMessage(0)
+    }
+  }
+
 
   globalThis.FileSystemFileHandle.prototype.createWritable = async function (options) {
     // Safari only support writing data in a worker with sync access handle.
+    if (!workerUrl) {
+      const blob = new Blob([code.toString() + `;${code.name}();`], {
+        type: 'text/javascript'
+      })
+      workerUrl = URL.createObjectURL(blob)
+    }
     const worker = new Worker(workerUrl, { type: 'module' })
 
     let position = 0
