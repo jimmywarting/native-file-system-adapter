@@ -2,7 +2,16 @@
 
 import { errors } from '../util.js'
 
-const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX } = errors
+const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX, ABORT } = errors
+
+/**
+ * @param {IDBTransaction} tx
+ * @param {(e) => {}} onerror
+ */
+function setupTxErrorHandler (tx, onerror) {
+  tx.onerror = () => onerror(tx.error)
+  tx.onabort = () => onerror(tx.error || new DOMException(...ABORT))
+}
 
 class Sink {
   /**

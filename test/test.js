@@ -274,7 +274,7 @@ t('getFile() provides a file that can be sliced', async root => {
 t('getFile() returns last modified time', async root => {
   handle = await createEmptyFile('mtime.txt', root)
   const first_mtime = (await handle.getFile()).lastModified
-  await new Promise(rs => setTimeout(rs, 10)) // FF is too fast on memory adapter
+  await new Promise(rs => setTimeout(rs, 1000)) // FF is too fast on memory adapter
   wfs = await handle.createWritable({ keepExistingData: false })
   await wfs.write('foo')
   await wfs.close()
