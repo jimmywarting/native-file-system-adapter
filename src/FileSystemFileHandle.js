@@ -56,7 +56,7 @@ if (
   let workerUrl
 
   // Worker code that should be inlined (can't use any external functions)
-  function code () {
+  const code = () => {
     let fileHandle, handle
 
     onmessage = async evt => {
@@ -96,7 +96,8 @@ if (
   globalThis.FileSystemFileHandle.prototype.createWritable = async function (options) {
     // Safari only support writing data in a worker with sync access handle.
     if (!workerUrl) {
-      const blob = new Blob([code.toString() + `;${code.name}();`], {
+      const stringCode = `(${code.toString()})()`
+      const blob = new Blob([stringCode], {
         type: 'text/javascript'
       })
       workerUrl = URL.createObjectURL(blob)
@@ -123,7 +124,7 @@ if (
     // So we need to pass the path to the worker. This is a bit hacky and ugly.
     const root = await navigator.storage.getDirectory()
     const parent = await wm.get(this)
-    const path = await parent.resolve(root)
+    const path = await root.resolve(parent)
 
     // Should likely never happen, but just in case...
     if (path === null) throw new DOMException(...GONE)
