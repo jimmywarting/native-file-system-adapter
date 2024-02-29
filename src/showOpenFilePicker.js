@@ -41,11 +41,15 @@ async function showOpenFilePicker (options = {}) {
   // Lazy load while the user is choosing the directory
   const p = import('./util.js')
 
-  await new Promise(resolve => {
-    input.addEventListener('change', resolve, { once: true })
-    input.click()
-  })
-  input.remove()
+  try {
+    await new Promise((resolve, reject) => {
+      input.addEventListener('change', resolve, { once: true })
+      input.addEventListener('cancel', reject, { once: true })
+      input.click()
+    })
+  } finally {
+    input.remove()
+  }
 
   return p.then(m => m.getFileHandlesFromInput(input))
 }
