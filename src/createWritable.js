@@ -1,3 +1,4 @@
+import FileSystemWritableFileStream from './FileSystemWritableFileStream.js'
 import { errors } from './util.js'
 
 const { INVALID, SYNTAX, GONE } = errors
