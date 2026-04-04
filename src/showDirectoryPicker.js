@@ -27,10 +27,17 @@ async function showDirectoryPicker (options = {}) {
   // Lazy load while the user is choosing the directory
   const p = import('./util.js')
 
-  await new Promise(resolve => {
-    input.addEventListener('change', resolve)
+  const evt = await new Promise(resolve => {
+    input.onchange = input.onchange = resolve
     input.click()
   })
+
+  input.onchange = input.onchange = null
+  input.remove()
+
+  if (evt.type === 'cancel') {
+    throw new DOMException("Failed to execute 'showDirectoryPicker' on 'file input': The user aborted a request.", 'AbortError')
+  }
 
   return p.then(mod => mod.getDirHandlesFromInput(input))
 }
