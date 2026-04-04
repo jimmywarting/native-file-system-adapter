@@ -68,9 +68,9 @@ const map = new Map()
 // Each event has a dataChannel that the data will be piped through
 globalThis.addEventListener('message', evt => {
   const data = evt.data
-  if (data && data.type === 'ping') {
+  if (data && data.type === 'native-file-system-adapter/ping') {
     // Respond to handshake ping so the main thread knows this SW supports downloads
-    evt.ports[0].postMessage({ pong: true })
+    evt.ports[0].postMessage({ type: 'native-file-system-adapter/pong' })
     return
   }
   if (data.url && data.readable) {

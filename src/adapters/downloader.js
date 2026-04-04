@@ -28,7 +28,7 @@ function supportsTransferableStreams () {
 
 /**
  * Send a ping to the service worker and wait for an acknowledgment.
- * Returns true if the SW responds with { pong: true }, false otherwise.
+ * Returns true if the SW responds with { type: 'native-file-system-adapter/pong' }, false otherwise.
  * @param {ServiceWorkerRegistration} sw
  * @param {number} [timeout=1000]
  * @returns {Promise<boolean>}
@@ -45,9 +45,9 @@ function checkServiceWorkerReady (sw, timeout = 1000) {
     port1.onmessage = evt => {
       clearTimeout(timer)
       port1.close()
-      resolve(evt.data && evt.data.pong === true)
+      resolve(evt.data && evt.data.type === 'native-file-system-adapter/pong')
     }
-    sw.active.postMessage({ type: 'ping' }, [port2])
+    sw.active.postMessage({ type: 'native-file-system-adapter/ping' }, [port2])
   })
 }
 
