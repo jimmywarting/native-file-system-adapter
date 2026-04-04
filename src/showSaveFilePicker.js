@@ -32,13 +32,6 @@ async function showSaveFilePicker (options = {}) {
     return native(options)
   }
 
-  // Pass the polyfill methods (excluding 'native') to the downloader.
-  // The downloader will try each method in order, verifying SW support
-  // dynamically and falling back as needed.
-  if (options._name) {
-    console.warn('deprecated _name, spec now have `suggestedName`')
-    options.suggestedName = options._name
-  }
   const polyfillMethods = methods.filter(m => m !== 'native')
   const { FileSystemFileHandle } = await import('./FileSystemFileHandle.js')
   const { FileHandle } = await import('./adapters/downloader.js')

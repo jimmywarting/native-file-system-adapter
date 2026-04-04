@@ -5,7 +5,6 @@ export function showSaveFilePicker(options?: {
     excludeAcceptAllOption?: boolean;
     types?: any[];
     suggestedName?: string;
-    _name?: string;
     /** @deprecated Use _preferredMethods instead */
     _preferPolyfill?: boolean;
     _preferredMethods?: SaveFileMethod[];
