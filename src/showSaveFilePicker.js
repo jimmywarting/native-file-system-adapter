@@ -26,9 +26,14 @@ async function showSaveFilePicker (options = {}) {
     }
   }
 
-  // Try native first if it's in the list
-  if (methods.includes('native') && native) {
-    return native(options)
+  // Iterate methods in order — only try native when it appears in sequence
+  for (const method of methods) {
+    if (method === 'native' && native) {
+      return native(options)
+    }
+    if (method !== 'native') {
+      break
+    }
   }
 
   const polyfillMethods = methods.filter(m => m !== 'native')
