@@ -12,6 +12,20 @@ const { GONE } = errors
 // @ts-ignore - Don't match newer versions of Safari, but that's okay
 const isOldSafari = /constructor/i.test(window.HTMLElement)
 
+/** Detect if the browser supports transferring ReadableStreams via postMessage */
+const supportsTransferableStreams = (() => {
+  try {
+    const rs = new ReadableStream()
+    const { port1, port2 } = new MessageChannel()
+    port1.postMessage(rs, [rs])
+    port1.close()
+    port2.close()
+    return true
+  } catch {
+    return false
+  }
+})()
+
 export class FileHandle {
   constructor (name = 'unkown') {
     this.name = name
@@ -53,7 +67,6 @@ export class FileHandle {
         }
       }))
     } else {
-      const { writable, readablePort } = new RemoteWritableStream(WritableStream)
       // Make filename RFC5987 compatible
       const fileName = encodeURIComponent(this.name).replace(/['()]/g, escape).replace(/\*/g, '%2A')
       const headers = {
@@ -64,23 +77,40 @@ export class FileHandle {
 
       const keepAlive = setInterval(() => sw.active.postMessage(0), 10000)
 
-      ts.readable.pipeThrough(new TransformStream({
+      const toUint8 = new TransformStream({
         transform (chunk, ctrl) {
           if (chunk instanceof Uint8Array) return ctrl.enqueue(chunk)
           const reader = new Response(chunk).body.getReader()
           const pump = _ => reader.read().then(e => e.done ? 0 : pump(ctrl.enqueue(e.value)))
           return pump()
         }
-      })).pipeTo(writable).finally(() => {
-        clearInterval(keepAlive)
       })
 
-      // Transfer the stream to service worker
-      sw.active.postMessage({
-        url: sw.scope + fileName,
-        headers,
-        readablePort
-      }, [readablePort])
+      if (supportsTransferableStreams) {
+        // Preferred: transfer the ReadableStream directly to the service worker
+        ts.readable.pipeTo(toUint8.writable).finally(() => {
+          clearInterval(keepAlive)
+        })
+
+        sw.active.postMessage({
+          url: sw.scope + fileName,
+          headers,
+          readable: toUint8.readable
+        }, [toUint8.readable])
+      } else {
+        // Fallback: use MessagePort-based stream transfer
+        const { writable, readablePort } = new RemoteWritableStream(WritableStream)
+
+        ts.readable.pipeThrough(toUint8).pipeTo(writable).finally(() => {
+          clearInterval(keepAlive)
+        })
+
+        sw.active.postMessage({
+          url: sw.scope + fileName,
+          headers,
+          readablePort
+        }, [readablePort])
+      }
 
       // Trigger the download with a hidden iframe
       const iframe = document.createElement('iframe')
