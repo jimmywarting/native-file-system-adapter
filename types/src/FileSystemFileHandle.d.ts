@@ -3,6 +3,7 @@ export class FileSystemFileHandle extends FileSystemHandle {
     constructor(adapter: any);
     createWritable(options?: {
         keepExistingData?: boolean;
+        size?: number;
     }): Promise<FileSystemWritableFileStream>;
     getFile(): Promise<File>;
     [kAdapter]: any;
