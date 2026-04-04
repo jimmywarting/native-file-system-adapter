@@ -9,27 +9,16 @@ const {
 } = config
 
 const { GONE } = errors
-// @ts-ignore - Don't match newer versions of Safari, but that's okay
-const isOldSafari = /constructor/i.test(window.HTMLElement)
-
-/** Detect if the browser supports transferring ReadableStreams via postMessage */
-const supportsTransferableStreams = (() => {
-  try {
-    const rs = new ReadableStream()
-    const { port1, port2 } = new MessageChannel()
-    port1.postMessage(rs, [rs])
-    port1.close()
-    port2.close()
-    return true
-  } catch {
-    return false
-  }
-})()
 
 export class FileHandle {
-  constructor (name = 'unkown') {
+  /**
+   * @param {string} [name]
+   * @param {'sw-transferable-stream' | 'sw-message-channel' | 'constructing-blob'} [method]
+   */
+  constructor (name = 'unkown', method = 'constructing-blob') {
     this.name = name
     this.kind = 'file'
+    this._method = method
   }
 
   async getFile () {
@@ -44,14 +33,13 @@ export class FileHandle {
    * @param {object} [options={}]
    */
   async createWritable (options = {}) {
-    const sw = await navigator.serviceWorker?.getRegistration()
     const link = document.createElement('a')
     const ts = new TransformStream()
     const sink = ts.writable
 
     link.download = this.name
 
-    if (isOldSafari || !sw) {
+    if (this._method === 'constructing-blob') {
       /** @type {Blob[]} */
       let chunks = []
       ts.readable.pipeTo(new WritableStream({
@@ -67,6 +55,7 @@ export class FileHandle {
         }
       }))
     } else {
+      const sw = await navigator.serviceWorker?.getRegistration()
       // Make filename RFC5987 compatible
       const fileName = encodeURIComponent(this.name).replace(/['()]/g, escape).replace(/\*/g, '%2A')
       const headers = {
@@ -86,7 +75,7 @@ export class FileHandle {
         }
       })
 
-      if (supportsTransferableStreams) {
+      if (this._method === 'sw-transferable-stream') {
         // Preferred: transfer the ReadableStream directly to the service worker
         ts.readable.pipeTo(toUint8.writable).finally(() => {
           clearInterval(keepAlive)

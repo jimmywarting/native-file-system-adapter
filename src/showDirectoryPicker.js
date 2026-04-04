@@ -4,12 +4,21 @@ const native = globalThis.showDirectoryPicker
 
 /**
  * @param {Object} [options]
- * @param {boolean} [options._preferPolyfill] If you rather want to use the polyfill instead of the native
+ * @param {boolean} [options._preferPolyfill] Deprecated. Use _preferredMethods instead.
+ * @param {('native' | 'input')[]} [options._preferredMethods] Ordered list of preferred methods
  * @returns {Promise<FileSystemDirectoryHandle>}
  */
 async function showDirectoryPicker (options = {}) {
-  if (native && !options._preferPolyfill) {
-    return native(options)
+  // Backward compat: convert _preferPolyfill to _preferredMethods
+  const methods = options._preferredMethods || (options._preferPolyfill ? ['input'] : ['native', 'input'])
+
+  for (const method of methods) {
+    if (method === 'native' && native) {
+      return native(options)
+    }
+    if (method === 'input') {
+      break
+    }
   }
 
   const input = document.createElement('input')
