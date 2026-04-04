@@ -1,3 +1,4 @@
+import { openAsBlob } from 'node:fs'
 import fs from 'node:fs/promises'
 import { join } from 'node:path'
 import { errors } from '../util.js'
@@ -121,9 +122,7 @@ export class FileHandle {
       if (err.code === 'ENOENT') throw new DOMException(...GONE)
     })
 
-    // TODO: replace once https://github.com/nodejs/node/issues/37340 is fixed
-    const { fileFrom } = await import('fetch-blob/from.js')
-    return fileFrom(this._path)
+    return openAsBlob(this._path)
   }
 
   async isSameEntry (other) {

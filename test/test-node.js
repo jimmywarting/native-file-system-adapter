@@ -1,7 +1,5 @@
 import { existsSync, mkdirSync, rmdirSync } from 'node:fs'
-import config from '../src/config.js'
 import steps from './test.js'
-import File from 'fetch-blob/file.js'
 import { getOriginPrivateDirectory } from '../src/es6.js'
 import { cleanupSandboxedFileSystem } from '../test/util.js'
 
@@ -24,7 +22,7 @@ async function start () {
   if (!existsSync(testFolderPath)) {
     mkdirSync(testFolderPath)
   }
-  config.File = File
+
   const root = await getOriginPrivateDirectory(import('../src/adapters/node.js'), './testfolder')
   const memory = await getOriginPrivateDirectory(import('../src/adapters/memory.js'))
 

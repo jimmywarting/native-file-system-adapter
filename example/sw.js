@@ -33,8 +33,6 @@ class MessagePortSource {
 
   /** @param {Error} reason */
   cancel (reason) {
-    // Firefox can notify a cancel event, chrome can't
-    // https://bugs.chromium.org/p/chromium/issues/detail?id=638494
     this.port.postMessage({ type: ERROR, reason: reason.message })
     this.port.close()
   }
@@ -70,7 +68,17 @@ const map = new Map()
 // Each event has a dataChannel that the data will be piped through
 globalThis.addEventListener('message', evt => {
   const data = evt.data
-  if (data.url && data.readablePort) {
+  if (data && data.type === 'native-file-system-adapter/ping') {
+    // Respond to handshake ping so the main thread knows this SW supports downloads
+    evt.ports[0].postMessage({ type: 'native-file-system-adapter/pong' })
+    return
+  }
+  if (data.url && data.readable) {
+    // Preferred: transferred ReadableStream received directly
+    data.rs = data.readable
+    map.set(data.url, data)
+  } else if (data.url && data.readablePort) {
+    // Fallback: reconstruct ReadableStream from MessagePort
     data.rs = new ReadableStream(
       new MessagePortSource(evt.data.readablePort),
       new CountQueuingStrategy({ highWaterMark: 4 })

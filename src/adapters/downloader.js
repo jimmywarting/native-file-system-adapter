@@ -12,10 +12,54 @@ const { GONE } = errors
 // @ts-ignore - Don't match newer versions of Safari, but that's okay
 const isOldSafari = /constructor/i.test(window.HTMLElement)
 
+/** Detect if the browser supports transferring ReadableStreams via postMessage */
+function supportsTransferableStreams () {
+  try {
+    const rs = new ReadableStream()
+    const { port1, port2 } = new MessageChannel()
+    port1.postMessage(rs, [rs])
+    port1.close()
+    port2.close()
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Send a ping to the service worker and wait for an acknowledgment.
+ * Returns true if the SW responds with { type: 'native-file-system-adapter/pong' }, false otherwise.
+ * @param {ServiceWorkerRegistration} sw
+ * @param {number} [timeout=1000]
+ * @returns {Promise<boolean>}
+ */
+function checkServiceWorkerReady (sw, timeout = 1000) {
+  return new Promise(resolve => {
+    if (!sw?.active) return resolve(false)
+    const { port1, port2 } = new MessageChannel()
+    const timer = setTimeout(() => {
+      port1.close()
+      port2.close()
+      resolve(false)
+    }, timeout)
+    port1.onmessage = evt => {
+      clearTimeout(timer)
+      port1.close()
+      resolve(evt.data && evt.data.type === 'native-file-system-adapter/pong')
+    }
+    sw.active.postMessage({ type: 'native-file-system-adapter/ping' }, [port2])
+  })
+}
+
 export class FileHandle {
-  constructor (name = 'unkown') {
+  /**
+   * @param {string} [name]
+   * @param {('sw-transferable-stream' | 'sw-message-channel' | 'constructing-blob')[]} [methods]
+   */
+  constructor (name = 'unkown', methods = ['constructing-blob']) {
     this.name = name
     this.kind = 'file'
+    this._methods = methods
   }
 
   async getFile () {
@@ -27,67 +71,135 @@ export class FileHandle {
   }
 
   /**
+   * Try each preferred method in order. For SW methods, verify the
+   * service worker actually supports downloads via a ping/pong handshake.
+   * Falls back gracefully to the next method in the list.
    * @param {object} [options={}]
    */
   async createWritable (options = {}) {
-    const sw = await navigator.serviceWorker?.getRegistration()
+    let methods = this._methods
+
+    // Old Safari can't handle service worker streams
+    if (isOldSafari) {
+      methods = ['constructing-blob']
+    }
+
+    // Pre-check SW availability once if any SW method is in the list
+    const needsSW = methods.some(m => m === 'sw-transferable-stream' || m === 'sw-message-channel')
+    let sw, swReady
+    if (needsSW) {
+      sw = await navigator.serviceWorker?.getRegistration()
+      swReady = sw ? await checkServiceWorkerReady(sw) : false
+    }
+
+    for (const method of methods) {
+      if (method === 'sw-transferable-stream') {
+        if (swReady && supportsTransferableStreams()) {
+          return this._createSWWritable(sw, 'sw-transferable-stream', options)
+        }
+        continue
+      }
+      if (method === 'sw-message-channel') {
+        if (swReady) {
+          return this._createSWWritable(sw, 'sw-message-channel', options)
+        }
+        continue
+      }
+      if (method === 'constructing-blob') {
+        return this._createBlobWritable()
+      }
+    }
+
+    // Ultimate fallback
+    return this._createBlobWritable()
+  }
+
+  /** @private */
+  _createBlobWritable () {
     const link = document.createElement('a')
     const ts = new TransformStream()
     const sink = ts.writable
 
     link.download = this.name
 
-    if (isOldSafari || !sw) {
-      /** @type {Blob[]} */
-      let chunks = []
-      ts.readable.pipeTo(new WritableStream({
-        write (chunk) {
-          chunks.push(new Blob([chunk]))
-        },
-        close () {
-          const blob = new Blob(chunks, { type: 'application/octet-stream; charset=utf-8' })
-          chunks = []
-          link.href = URL.createObjectURL(blob)
-          link.click()
-          setTimeout(() => URL.revokeObjectURL(link.href), 10000)
-        }
-      }))
-    } else {
-      const { writable, readablePort } = new RemoteWritableStream(WritableStream)
-      // Make filename RFC5987 compatible
-      const fileName = encodeURIComponent(this.name).replace(/['()]/g, escape).replace(/\*/g, '%2A')
-      const headers = {
-        'content-disposition': "attachment; filename*=UTF-8''" + fileName,
-        'content-type': 'application/octet-stream; charset=utf-8',
-        ...(options.size ? { 'content-length': options.size } : {})
+    /** @type {Blob[]} */
+    let chunks = []
+    ts.readable.pipeTo(new WritableStream({
+      write (chunk) {
+        chunks.push(new Blob([chunk]))
+      },
+      close () {
+        const blob = new Blob(chunks, { type: 'application/octet-stream; charset=utf-8' })
+        chunks = []
+        link.href = URL.createObjectURL(blob)
+        link.click()
+        setTimeout(() => URL.revokeObjectURL(link.href), 10000)
       }
+    }))
 
-      const keepAlive = setInterval(() => sw.active.postMessage(0), 10000)
+    return sink.getWriter()
+  }
 
-      ts.readable.pipeThrough(new TransformStream({
-        transform (chunk, ctrl) {
-          if (chunk instanceof Uint8Array) return ctrl.enqueue(chunk)
-          const reader = new Response(chunk).body.getReader()
-          const pump = _ => reader.read().then(e => e.done ? 0 : pump(ctrl.enqueue(e.value)))
-          return pump()
-        }
-      })).pipeTo(writable).finally(() => {
+  /**
+   * @private
+   * @param {ServiceWorkerRegistration} sw
+   * @param {'sw-transferable-stream' | 'sw-message-channel'} method
+   * @param {object} options
+   */
+  _createSWWritable (sw, method, options) {
+    const ts = new TransformStream()
+    const sink = ts.writable
+
+    // Make filename RFC5987 compatible
+    const fileName = encodeURIComponent(this.name).replace(/['()]/g, escape).replace(/\*/g, '%2A')
+    const headers = {
+      'content-disposition': "attachment; filename*=UTF-8''" + fileName,
+      'content-type': 'application/octet-stream; charset=utf-8',
+      ...(options.size ? { 'content-length': options.size } : {})
+    }
+
+    const keepAlive = setInterval(() => sw.active.postMessage(0), 10000)
+
+    const toUint8 = new TransformStream({
+      transform (chunk, ctrl) {
+        if (chunk instanceof Uint8Array) return ctrl.enqueue(chunk)
+        const reader = new Response(chunk).body.getReader()
+        const pump = _ => reader.read().then(e => e.done ? 0 : pump(ctrl.enqueue(e.value)))
+        return pump()
+      }
+    })
+
+    if (method === 'sw-transferable-stream') {
+      // Preferred: transfer the ReadableStream directly to the service worker
+      ts.readable.pipeTo(toUint8.writable).finally(() => {
         clearInterval(keepAlive)
       })
 
-      // Transfer the stream to service worker
+      sw.active.postMessage({
+        url: sw.scope + fileName,
+        headers,
+        readable: toUint8.readable
+      }, [toUint8.readable])
+    } else {
+      // Fallback: use MessagePort-based stream transfer
+      const { writable, readablePort } = new RemoteWritableStream(WritableStream)
+
+      ts.readable.pipeThrough(toUint8).pipeTo(writable).finally(() => {
+        clearInterval(keepAlive)
+      })
+
       sw.active.postMessage({
         url: sw.scope + fileName,
         headers,
         readablePort
       }, [readablePort])
-
-      // Trigger the download with a hidden iframe
-      const iframe = document.createElement('iframe')
-      iframe.hidden = true
-      iframe.src = sw.scope + fileName
-      document.body.appendChild(iframe)
     }
+
+    // Trigger the download with a hidden iframe
+    const iframe = document.createElement('iframe')
+    iframe.hidden = true
+    iframe.src = sw.scope + fileName
+    document.body.appendChild(iframe)
 
     return sink.getWriter()
   }

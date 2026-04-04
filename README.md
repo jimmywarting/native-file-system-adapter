@@ -127,8 +127,8 @@ import { showDirectoryPicker, showOpenFilePicker } from 'native-file-system-adap
 // The polyfilled (file input) version will turn into a memory adapter
 // You will have read & write permission on the memory adapter,
 // you might want to transfer (copy) the handle to another adapter
-const [fileHandle] = await showOpenFilePicker({_preferPolyfill: boolean, ...sameOpts})
-const dirHandle = await showDirectoryPicker({_preferPolyfill: boolean, ...sameOpts})
+const [fileHandle] = await showOpenFilePicker({_preferredMethods: ['native', 'input'], ...sameOpts})
+const dirHandle = await showDirectoryPicker({_preferredMethods: ['native', 'input'], ...sameOpts})
 ```
 
 ### Drag and drop
@@ -155,7 +155,7 @@ const [fileHandle] = await showOpenFilePicker({
   types: [], // default
   multiple: false, // default
   excludeAcceptAllOption: false, // default
-  _preferPolyfill: false // default
+  _preferredMethods: ['native', 'input'] // default
 })
 
 // returns a File Instance
@@ -175,7 +175,7 @@ await writable.close()
 import { showSaveFilePicker } from 'native-file-system-adapter'
 
 const fileHandle = await showSaveFilePicker({
-  _preferPolyfill: false,
+  _preferredMethods: ['native', 'sw-transferable-stream', 'sw-message-channel', 'constructing-blob'], // default
   suggestedName: 'Untitled.png',
   types: [
     { accept: { "image/png": [ "png" ] } },
