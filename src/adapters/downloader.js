@@ -62,7 +62,7 @@ export class FileHandle {
         ...(options.size ? { 'content-length': options.size } : {})
       }
 
-      const keepAlive = setTimeout(() => sw.active.postMessage(0), 10000)
+      const keepAlive = setInterval(() => sw.active.postMessage(0), 10000)
 
       ts.readable.pipeThrough(new TransformStream({
         transform (chunk, ctrl) {
