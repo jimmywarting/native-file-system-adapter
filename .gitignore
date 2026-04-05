@@ -1,3 +1,10 @@
+# WPT (Web Platform Tests) - fetched by scripts/fetch-wpt.sh
+wpt/
+
+# Playwright test results
+test-results/
+playwright-report/
+
 # Logs
 logs
 *.log
