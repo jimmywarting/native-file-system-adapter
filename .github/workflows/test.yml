@@ -1,0 +1,52 @@
+name: WPT Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  wpt-node:
+    name: WPT Tests (Node.js)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: npm ci
+      - name: Fetch WPT tests
+        run: bash scripts/fetch-wpt.sh
+      - name: Run WPT tests (Node.js)
+        run: npm run test:wpt-node
+
+  wpt-browser:
+    name: WPT Tests (Browsers)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Fetch WPT tests
+        run: bash scripts/fetch-wpt.sh
+      - name: Run WPT tests (Browsers)
+        run: npm run test:wpt-browser
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30
