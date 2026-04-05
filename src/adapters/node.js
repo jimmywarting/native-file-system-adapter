@@ -1,6 +1,6 @@
 import { openAsBlob } from 'node:fs'
 import fs from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
 import { errors } from '../util.js'
 
 import config from '../config.js'
@@ -33,11 +33,20 @@ export class Sink {
   /**
    * @param {fs.FileHandle} fileHandle
    * @param {number} size
+   * @param {string} dirPath
    */
-  constructor (fileHandle, size) {
+  constructor (fileHandle, size, dirPath) {
     this._fileHandle = fileHandle
     this._size = size
     this._position = 0
+    this._dirPath = dirPath
+  }
+
+  async _checkDir () {
+    await fs.stat(this._dirPath).catch(err => {
+      if (err.code === 'ENOENT') throw new DOMException(...GONE)
+      throw err
+    })
   }
 
   async abort() {
@@ -45,6 +54,7 @@ export class Sink {
   }
 
   async write (chunk) {
+    await this._checkDir()
     if (typeof chunk === 'object') {
       if (chunk.type === 'write') {
         if (Number.isInteger(chunk.position) && chunk.position >= 0) {
@@ -68,12 +78,17 @@ export class Sink {
         }
       } else if (chunk.type === 'truncate') {
         if (Number.isInteger(chunk.size) && chunk.size >= 0) {
-          await this._fileHandle.truncate(chunk.size)
-          this._size = chunk.size
-          if (this._position > this._size) {
-            this._position = this._size
+          try {
+            await this._fileHandle.truncate(chunk.size)
+            this._size = chunk.size
+            if (this._position > this._size) {
+              this._position = this._size
+            }
+            return
+          } catch (err) {
+            if (err.code === 'ENOENT') throw new DOMException(...GONE)
+            throw err
           }
-          return
         } else {
           await this._fileHandle.close()
           throw new DOMException(...SYNTAX('truncate requires a size argument'))
@@ -87,16 +102,26 @@ export class Sink {
       chunk = Buffer.from(chunk)
     } else if (isBlob(chunk)) {
       for await (const data of chunk.stream()) {
-        const res = await this._fileHandle.writev([data], this._position)
-        this._position += res.bytesWritten
-        this._size += res.bytesWritten
+        try {
+          const res = await this._fileHandle.writev([data], this._position)
+          this._position += res.bytesWritten
+          this._size = Math.max(this._size, this._position)
+        } catch (err) {
+          if (err.code === 'ENOENT') throw new DOMException(...GONE)
+          throw err
+        }
       }
       return
     }
 
-    const res = await this._fileHandle.writev([chunk], this._position)
-    this._position += res.bytesWritten
-    this._size += res.bytesWritten
+    try {
+      const res = await this._fileHandle.writev([chunk], this._position)
+      this._position += res.bytesWritten
+      this._size = Math.max(this._size, this._position)
+    } catch (err) {
+      if (err.code === 'ENOENT') throw new DOMException(...GONE)
+      throw err
+    }
   }
 
   async close () {
@@ -140,7 +165,14 @@ export class FileHandle {
       throw err
     })
     const { size } = await fileHandle.stat()
-    return new Sink(fileHandle, size)
+    return new Sink(fileHandle, size, dirname(this._path))
+  }
+
+  async remove () {
+    await fs.unlink(this._path).catch(err => {
+      if (err.code === 'ENOENT') throw new DOMException(...GONE)
+      throw err
+    })
   }
 }
 
@@ -236,6 +268,28 @@ export class FolderHandle {
           throw err
         })
       }
+    } else {
+      await fs.unlink(path)
+    }
+  }
+
+  async remove (options = {}) {
+    const path = this._path
+    const stat = await fs.lstat(path).catch(err => {
+      if (err.code === 'ENOENT') throw new DOMException(...GONE)
+      throw err
+    })
+    if (stat.isDirectory()) {
+      if (!options.recursive) {
+        const entries = await fs.readdir(path)
+        if (entries.length > 0) {
+          throw new DOMException(...MOD_ERR)
+        }
+      }
+      await fs.rm(path, { recursive: !!options.recursive }).catch(err => {
+        if (err.code === 'ENOTEMPTY') throw new DOMException(...MOD_ERR)
+        throw err
+      })
     } else {
       await fs.unlink(path)
     }

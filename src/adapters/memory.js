@@ -18,6 +18,7 @@ export class Sink {
   }
 
   write (chunk) {
+    if (this.fileHandle._deleted) throw new DOMException(...GONE)
     let file = this.file
 
     if (typeof chunk === 'object') {
@@ -101,13 +102,14 @@ export class Sink {
 }
 
 export class FileHandle {
-  constructor (name = '', file = new File([], name), writable = true) {
+  constructor (name = '', file = new File([], name), writable = true, parent = null) {
     this._file = file
     this.name = name
     this.kind = 'file'
     this._deleted = false
     this.writable = writable
     this.readable = true
+    this._parent = parent
   }
 
   async getFile () {
@@ -134,12 +136,21 @@ export class FileHandle {
     this._deleted = true
     this._file = null
   }
+
+  async remove () {
+    if (this._deleted) throw new DOMException(...GONE)
+    await this._destroy()
+    if (this._parent) {
+      const name = this.name
+      delete this._parent._entries[name]
+    }
+  }
 }
 
 export class FolderHandle {
 
   /** @param {string} name */
-  constructor (name, writable = true) {
+  constructor (name, writable = true, parent = null) {
     this.name = name
     this.kind = 'directory'
     this._deleted = false
@@ -147,6 +158,7 @@ export class FolderHandle {
     this._entries = {}
     this.writable = writable
     this.readable = true
+    this._parent = parent
   }
 
   /** @returns {AsyncGenerator<[string, FileHandle | FolderHandle]>} */
@@ -174,7 +186,7 @@ export class FolderHandle {
       }
     } else {
       if (opts.create) {
-        return (this._entries[name] = new FolderHandle(name))
+        return (this._entries[name] = new FolderHandle(name, true, this))
       } else {
         throw new DOMException(...GONE)
       }
@@ -192,7 +204,7 @@ export class FolderHandle {
     if (entry && !isFile) throw new DOMException(...MISMATCH)
     if (!entry && !opts.create) throw new DOMException(...GONE)
     if (!entry && opts.create) {
-      return (this._entries[name] = new FileHandle(name))
+      return (this._entries[name] = new FileHandle(name, new File([], name), true, this))
     }
   }
 
@@ -210,6 +222,18 @@ export class FolderHandle {
     }
     this._entries = {}
     this._deleted = true
+  }
+
+  async remove (options = {}) {
+    if (this._deleted) throw new DOMException(...GONE)
+    if (!options.recursive && Object.keys(this._entries).length > 0) {
+      throw new DOMException(...MOD_ERR)
+    }
+    await this._destroy(!!options.recursive)
+    if (this._parent) {
+      const name = this.name
+      delete this._parent._entries[name]
+    }
   }
 }
 

@@ -1,17 +1,13 @@
-import { join, basename } from 'https://deno.land/std@0.108.0/path/mod.ts'
+import { join, basename } from 'jsr:@std/path'
 import { errors } from '../util.js'
 
 const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX } = errors
 
-// TODO:
-// - either depend on fetch-blob.
-// - push for https://github.com/denoland/deno/pull/10969
-// - or extend the File class like i did in that PR
 /** @param {string} path */
-async function fileFrom (path) {
+function fileFrom (path) {
   const e = Deno.readFileSync(path)
-  const s = await Deno.stat(path)
-  return new File([e], basename(path), { lastModified: Number(s.mtime) })
+  const s = Deno.statSync(path)
+  return new File([new Blob([e], { type: 'application/octet-stream' })], basename(path), { lastModified: Number(s.mtime) })
 }
 
 export class Sink {
@@ -73,14 +69,14 @@ export class Sink {
       for await (const data of chunk.stream()) {
         const written = await this.fileHandle.write(data)
         this.position += written
-        this.size += written
+        this.size = Math.max(this.size, this.position)
       }
       return
     }
     await this.fileHandle.seek(this.position, Deno.SeekMode.Start)
     const written = await this.fileHandle.write(chunk)
     this.position += written
-    this.size += written
+    this.size = Math.max(this.size, this.position)
   }
 
   async close () {
@@ -125,6 +121,13 @@ export class FileHandle {
 
     const { size } = await fileHandle.stat()
     return new Sink(fileHandle, size)
+  }
+
+  async remove () {
+    await Deno.remove(this.#path).catch(err => {
+      if (err.name === 'NotFound') throw new DOMException(...GONE)
+      throw err
+    })
   }
 }
 
@@ -232,6 +235,23 @@ export class FolderHandle {
       }
     } else {
       await Deno.remove(path)
+    }
+  }
+
+  async remove (options = {}) {
+    const stat = await Deno.lstat(this.#path).catch(err => {
+      if (err.name === 'NotFound') throw new DOMException(...GONE)
+      throw err
+    })
+    if (stat.isDirectory) {
+      if (!options.recursive) {
+        for await (const _ of Deno.readDir(this.#path)) {
+          throw new DOMException(...MOD_ERR)
+        }
+      }
+      await Deno.remove(this.#path, { recursive: !!options.recursive })
+    } else {
+      await Deno.remove(this.#path)
     }
   }
 }

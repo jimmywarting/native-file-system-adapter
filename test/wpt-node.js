@@ -169,6 +169,7 @@ const SUPPORTED_SCRIPTS = [
   'FileSystemWritableFileStream-write.js',
   'FileSystemWritableFileStream-piped.js',
   'FileSystemBaseHandle-isSameEntry.js',
+  'FileSystemBaseHandle-remove.js',
 ]
 
 const wptDir = resolve(ROOT, 'wpt', 'fs', 'script-tests')

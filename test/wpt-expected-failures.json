@@ -47,10 +47,6 @@
     {
       "name": "createWritable() can be called on two handles representing the same file",
       "reason": "Test uses getDirectoryHandle on a FileHandle, which is not supported by the polyfill."
-    },
-    {
-      "name": "createWritable({keepExistingData: false}): atomic writable file stream initialized with empty file",
-      "reason": "Node.js adapter does not correctly implement keepExistingData=false atomic semantics."
     }
   ],
   "FileSystemWritableFileStream-write.js": [

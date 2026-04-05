@@ -759,9 +759,7 @@ t('createWritable() fails when parent directory is removed', async root => {
   assert(err.name === 'NotFoundError')
 })
 
-/*
 t('write() fails when parent directory is removed', async root => {
-  // TODO: fix me
   dir = await createDirectory('parent_dir', root)
   handle = await createEmptyFile('write_fails_when_dir_removed.txt', dir)
   wfs = await handle.createWritable()
@@ -771,7 +769,6 @@ t('write() fails when parent directory is removed', async root => {
 })
 
 t('truncate() fails when parent directory is removed', async root => {
-  // TODO: fix me
   dir = await createDirectory('parent_dir', root)
   file_name = 'truncate_fails_when_dir_removed.txt'
   handle = await createEmptyFile(file_name, dir)
@@ -780,7 +777,6 @@ t('truncate() fails when parent directory is removed', async root => {
   err = await wfs.truncate(0).catch(e => e)
   assert(err?.name === 'NotFoundError', 'truncate() fails when parent directory is removed')
 })
-*/
 
 t('createWritable({keepExistingData: true}): atomic writable file stream initialized with source contents', async root => {
   handle = await createFileWithContents('atomic_file_is_copied.txt', 'fooks', root)
@@ -791,16 +787,15 @@ t('createWritable({keepExistingData: true}): atomic writable file stream initial
   assert(await getFileSize(handle) === 5)
 })
 
-// TODO: fix me
-// t('createWritable({keepExistingData: false}): atomic writable file stream initialized with empty file', async root => {
-//   handle = await createFileWithContents('atomic_file_is_not_copied.txt', 'very long string', root)
-//   wfs = await handle.createWritable({ keepExistingData: false })
-//   await wfs.write('bar')
-//   assert(await getFileContents(handle) === 'very long string')
-//   await wfs.close()
-//   assert(await getFileContents(handle) === 'bar')
-//   assert(await getFileSize(handle) === 3)
-// })
+t('createWritable({keepExistingData: false}): atomic writable file stream initialized with empty file', async root => {
+  handle = await createFileWithContents('atomic_file_is_not_copied.txt', 'very long string', root)
+  wfs = await handle.createWritable({ keepExistingData: false })
+  await wfs.write('bar')
+  assert(await getFileContents(handle) === 'very long string')
+  await wfs.close()
+  assert(await getFileContents(handle) === 'bar')
+  assert(await getFileSize(handle) === 3)
+})
 
 t('createWritable({keepExistingData: false}) removes previous data', async root => {
   handle = await createFileWithContents('atomic_file_is_not_copied.txt', 'very long string', root)

@@ -27,6 +27,10 @@ export class FileHandle {
     throw new DOMException(...DISALLOWED)
   }
 
+  async remove () {
+    throw new DOMException(...DISALLOWED)
+  }
+
   async isSameEntry (other) {
     return this === other
   }
@@ -103,6 +107,10 @@ export class FolderHandle {
   }
 
   async removeEntry (name, opts) {
+    throw new DOMException(...DISALLOWED)
+  }
+
+  async remove () {
     throw new DOMException(...DISALLOWED)
   }
 }

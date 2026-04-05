@@ -148,6 +148,16 @@ class FileHandle {
     file = opts.keepExistingData ? file : new File([], this.name)
     return new Sink(this._db, this._id, file.size, file)
   }
+
+  async remove () {
+    return new Promise((resolve, reject) => {
+      const [tx, table] = store(this._db)
+      table.delete(this._id)
+      tx.oncomplete = () => resolve()
+      tx.onerror = reject
+      tx.onabort = reject
+    })
+  }
 }
 
 /**
@@ -284,6 +294,29 @@ class FolderHandle {
         delete cwd[name]
         table.put(cwd, this._id)
         rimraf(evt, toDelete, !!opts.recursive)
+      }
+      tx.oncomplete = resolve
+      tx.onerror = reject
+      tx.onabort = () => {
+        reject(new DOMException(...MOD_ERR))
+      }
+    })
+  }
+
+  async remove (options = {}) {
+    return new Promise((resolve, reject) => {
+      const [tx, table] = store(this._db)
+      const cwdQ = table.get(this._id)
+      cwdQ.onsuccess = (evt) => {
+        const cwd = cwdQ.result
+        if (!options.recursive) {
+          for (const key of Object.keys(cwd)) {
+            if (key !== '_') {
+              return reject(new DOMException(...MOD_ERR))
+            }
+          }
+        }
+        rimraf(evt, cwd, !!options.recursive)
       }
       tx.oncomplete = resolve
       tx.onerror = reject

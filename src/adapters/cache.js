@@ -132,6 +132,12 @@ export class FileHandle {
       )
     )
   }
+
+  async remove () {
+    const [r] = await this._cache.keys(this.path)
+    if (!r) throw new DOMException(...GONE)
+    await this._cache.delete(this.path)
+  }
 }
 
 export class FolderHandle {
@@ -256,6 +262,35 @@ export class FolderHandle {
     } else {
       throw new DOMException(...GONE)
     }
+  }
+
+  async remove (options = {}) {
+    const tree = await this._tree
+    if (!options.recursive) {
+      for (const [path, isFile] of Object.entries(tree)) {
+        if (path !== '_' && path !== this._dir) {
+          if (isFile) {
+            // files at this level are ok
+          } else {
+            throw new DOMException(...MOD_ERR)
+          }
+        }
+      }
+    }
+    const toDelete = [...Object.entries(tree)]
+    while (toDelete.length) {
+      const [path, isFile] = toDelete.pop()
+      if (path === '_' || path === this._dir) continue
+      if (isFile) {
+        await this._cache.delete(path)
+      } else {
+        try {
+          const e = await this._cache.match(path).then(r => r.json())
+          toDelete.push(...Object.entries(e))
+        } catch (_) { /* ignore */ }
+      }
+    }
+    await this._cache.delete(this._dir)
   }
 }
 
