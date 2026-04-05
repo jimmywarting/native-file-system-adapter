@@ -92,6 +92,8 @@ test.describe('WPT File System Tests', () => {
         }
       }
 
+      // Guard against silent failures (page error, timeout, no tests loaded)
+      // Without this, unexpectedFailures would be vacuously empty if results is empty.
       expect(results.length).toBeGreaterThan(0)
 
       // Fail if any WPT subtest failure is not in the expected-failures allowlist
