@@ -41,9 +41,6 @@ test.describe('WPT File System Tests', () => {
 
   for (const scriptName of scripts) {
     test(scriptName, async ({ page }) => {
-      const testResults = []
-      let isDone = false
-
       // Listen for console messages to track test progress
       page.on('console', msg => {
         if (msg.type() === 'error') {
@@ -55,33 +52,20 @@ test.describe('WPT File System Tests', () => {
       const url = `/test/wpt-test-page.html?dir=fs&scripts=${encodeURIComponent(scriptName)}`
       await page.goto(url)
 
-      // Wait for the WPT harness to finish - collect results via evaluate
+      // Wait for results to be collected by the completion callback
+      // The test page stores results in window.__wptResults when done
       const results = await page.evaluate(() => {
         return new Promise((resolve) => {
-          const results = []
-
-          // If done() has already been called, resolve immediately
-          if (window.completion_callback_called) {
-            resolve(results)
-            return
-          }
-
-          // Listen for test completion
-          const originalCallback = window.completion_callback
-          window.completion_callback = (tests, harnessStatus) => {
-            for (const t of tests) {
-              results.push({
-                name: t.name,
-                status: t.status,
-                message: t.message || null,
-                stack: t.stack || null,
-              })
+          const checkResults = () => {
+            if (window.__wptResults !== null) {
+              resolve(window.__wptResults)
+            } else {
+              setTimeout(checkResults, 100)
             }
-            resolve(results)
           }
-
-          // Fallback timeout
-          setTimeout(() => resolve(results), 60000)
+          checkResults()
+          // Fallback timeout after 60 seconds
+          setTimeout(() => resolve(window.__wptResults || []), 60000)
         })
       })
 

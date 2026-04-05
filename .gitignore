@@ -5,6 +5,9 @@ wpt/
 test-results/
 playwright-report/
 
+# Test artifacts
+testfolder/
+
 # Logs
 logs
 *.log

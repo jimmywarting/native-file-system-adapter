@@ -39,7 +39,7 @@ async function getFileContents (handle) {
 
 async function getDirectoryEntryCount (handle) {
   let result = 0
-  for await (const entry of handle) {
+  for await (const _ of handle) {
     result++
   }
   return result

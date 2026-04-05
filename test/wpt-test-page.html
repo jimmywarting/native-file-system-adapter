@@ -13,6 +13,19 @@
       explicit_timeout: true,
       explicit_done: true,
     });
+
+    // Store results globally so Playwright can access them
+    window.__wptResults = null;
+    add_completion_callback(function(tests, harnessStatus) {
+      window.__wptResults = tests.map(function(t) {
+        return {
+          name: t.name,
+          status: t.status,
+          message: t.message || null,
+          stack: t.stack || null,
+        };
+      });
+    });
   </script>
   <script type="module">
     // Import the polyfill
@@ -48,7 +61,7 @@
 
     async function getDirectoryEntryCount(handle) {
       let result = 0;
-      for await (let entry of handle) {
+      for await (const entry of handle) {
         result++;
       }
       return result;
@@ -56,7 +69,7 @@
 
     async function getSortedDirectoryEntries(handle) {
       let result = [];
-      for await (let entry of handle.values()) {
+      for await (const entry of handle.values()) {
         if (entry.kind === 'directory') {
           result.push(entry.name + '/');
         } else {
