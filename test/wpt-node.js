@@ -3,7 +3,7 @@
  * Runs WPT File System Access tests against the polyfill's memory adapter.
  */
 
-import { existsSync, readdirSync, mkdirSync, rmSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, mkdirSync, rmSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { getOriginPrivateDirectory } from '../src/es6.js'
@@ -254,8 +254,7 @@ if (totalTests === 0) {
 // Check failures against the allowlist
 // ──────────────────────────────────────────────────────
 
-const allowlistPath = resolve(__dirname, 'wpt-expected-failures.json')
-const allowlist = JSON.parse(readFileSync(allowlistPath, 'utf8'))
+const { default: allowlist } = await import('./wpt-expected-failures.json', { with: { type: 'json' } })
 
 let hasUnexpectedFailure = false
 for (const { script, description } of allScriptFailures) {

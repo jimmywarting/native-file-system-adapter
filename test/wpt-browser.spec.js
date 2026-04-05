@@ -1,15 +1,11 @@
 import { test, expect } from '@playwright/test'
-import { readdirSync, existsSync, readFileSync } from 'node:fs'
+import { readdirSync, existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import expectedFailures from './wpt-expected-failures.json' with { type: 'json' }
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
-
-// Load the expected-failures allowlist
-const expectedFailures = JSON.parse(
-  readFileSync(resolve(__dirname, 'wpt-expected-failures.json'), 'utf8')
-)
 
 // WPT test scripts that are compatible with the polyfill's memory adapter.
 // We skip tests that require browser-specific APIs (postMessage, IndexedDB,
@@ -75,8 +71,8 @@ test.describe('WPT File System Tests', () => {
       })
 
       // Report individual results
-      const passed = results.filter(r => r.status === 0)
-      const failed = results.filter(r => r.status !== 0)
+      const passed = results.filter(result => result.status === 0)
+      const failed = results.filter(result => result.status !== 0)
 
       console.log(`  ${scriptName}: ${passed.length} passed, ${failed.length} failed out of ${results.length}`)
 
@@ -99,10 +95,10 @@ test.describe('WPT File System Tests', () => {
       // Fail if any WPT subtest failure is not in the expected-failures allowlist
       const allowedFailures = expectedFailures[scriptName] || []
       const unexpectedFailures = failed.filter(
-        r => !allowedFailures.some(entry => entry.name === r.name)
+        failure => !allowedFailures.some(entry => entry.name === failure.name)
       )
-      for (const f of unexpectedFailures) {
-        console.error(`  UNEXPECTED FAILURE: [${scriptName}] ${f.name}${f.message ? ': ' + f.message : ''}`)
+      for (const failure of unexpectedFailures) {
+        console.error(`  UNEXPECTED FAILURE: [${scriptName}] ${failure.name}${failure.message ? ': ' + failure.message : ''}`)
       }
       expect(unexpectedFailures).toHaveLength(0)
     })
