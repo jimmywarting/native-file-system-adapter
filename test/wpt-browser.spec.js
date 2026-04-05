@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test'
 import { readdirSync, existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import expectedFailures from './wpt-expected-failures.json' with { type: 'json' }
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
@@ -70,8 +71,8 @@ test.describe('WPT File System Tests', () => {
       })
 
       // Report individual results
-      const passed = results.filter(r => r.status === 0)
-      const failed = results.filter(r => r.status !== 0)
+      const passed = results.filter(result => result.status === 0)
+      const failed = results.filter(result => result.status !== 0)
 
       console.log(`  ${scriptName}: ${passed.length} passed, ${failed.length} failed out of ${results.length}`)
 
@@ -87,12 +88,19 @@ test.describe('WPT File System Tests', () => {
         }
       }
 
-      // We expect at least some tests to pass, but don't fail the whole
-      // suite if some individual WPT tests fail (since the polyfill may
-      // not implement everything yet).
+      // Guard against silent failures (page error, timeout, no tests loaded)
+      // Without this, unexpectedFailures would be vacuously empty if results is empty.
       expect(results.length).toBeGreaterThan(0)
-      // At least some tests should pass
-      expect(passed.length).toBeGreaterThan(0)
+
+      // Fail if any WPT subtest failure is not in the expected-failures allowlist
+      const allowedFailures = expectedFailures[scriptName] || []
+      const unexpectedFailures = failed.filter(
+        failure => !allowedFailures.some(entry => entry.name === failure.name)
+      )
+      for (const failure of unexpectedFailures) {
+        console.error(`  UNEXPECTED FAILURE: [${scriptName}] ${failure.name}${failure.message ? ': ' + failure.message : ''}`)
+      }
+      expect(unexpectedFailures).toHaveLength(0)
     })
   }
 })

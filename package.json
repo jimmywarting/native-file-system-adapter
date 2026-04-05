@@ -28,7 +28,7 @@
     "url": "git+https://github.com/jimmywarting/native-file-system-adapter.git"
   },
   "engines": {
-    "node": ">=14.8.0"
+    "node": ">=20"
   },
   "types": "types/mod.d.ts",
   "keywords": [
