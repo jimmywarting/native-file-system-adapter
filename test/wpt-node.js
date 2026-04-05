@@ -3,7 +3,7 @@
  * Runs WPT File System Access tests against the polyfill's memory adapter.
  */
 
-import { existsSync, readdirSync, mkdirSync, rmSync } from 'node:fs'
+import { existsSync, readdirSync, mkdirSync, rmSync, readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { getOriginPrivateDirectory } from '../src/es6.js'
@@ -188,6 +188,7 @@ const scripts = SUPPORTED_SCRIPTS.filter(s => availableFiles.includes(s))
 let totalPassed = 0
 let totalFailed = 0
 let totalTests = 0
+const allScriptFailures = [] // { script, description }
 
 console.log('\n\x1b[1m=== WPT Tests (Memory Adapter) ===\x1b[0m\n')
 
@@ -195,10 +196,13 @@ for (const script of scripts) {
   console.log(`\n\x1b[1m${script}\x1b[0m`)
   const scriptPath = pathToFileURL(resolve(wptDir, script)).href
   await import(scriptPath)
-  const { passed, failed, total } = await runTests()
+  const { passed, failed, total, failures } = await runTests()
   totalPassed += passed
   totalFailed += failed
   totalTests += total
+  for (const f of failures) {
+    allScriptFailures.push({ script, description: f.description })
+  }
 }
 
 // Run again with Node.js adapter if available
@@ -221,10 +225,13 @@ if (nodeRoot) {
     // we add a cache-busting query parameter.
     const scriptPath = pathToFileURL(resolve(wptDir, script)).href + '?adapter=node'
     await import(scriptPath)
-    const { passed, failed, total } = await runTests()
+    const { passed, failed, total, failures } = await runTests()
     totalPassed += passed
     totalFailed += failed
     totalTests += total
+    for (const f of failures) {
+      allScriptFailures.push({ script, description: f.description })
+    }
   }
 
   // Cleanup
@@ -243,7 +250,26 @@ if (totalTests === 0) {
   process.exit(1)
 }
 
-// Don't fail on test failures yet - the goal is to have the framework running
-// and see what passes/fails
-console.log(`\n${totalFailed > 0 ? 'Some tests failed (expected while polyfill is being improved).' : 'All tests passed!'}`)
+// ──────────────────────────────────────────────────────
+// Check failures against the allowlist
+// ──────────────────────────────────────────────────────
+
+const allowlistPath = resolve(__dirname, 'wpt-expected-failures.json')
+const allowlist = JSON.parse(readFileSync(allowlistPath, 'utf8'))
+
+let hasUnexpectedFailure = false
+for (const { script, description } of allScriptFailures) {
+  const allowed = allowlist[script] || []
+  if (!allowed.some(entry => entry.name === description)) {
+    console.error(`\n  \x1b[31mUNEXPECTED FAILURE\x1b[0m [${script}] ${description}`)
+    hasUnexpectedFailure = true
+  }
+}
+
+if (hasUnexpectedFailure) {
+  console.error('\n\x1b[31mUnexpected test failures detected.\x1b[0m Add them to test/wpt-expected-failures.json with a reason if they are known issues.')
+  process.exit(1)
+}
+
+console.log(`\n${totalFailed > 0 ? '\x1b[33mSome tests failed (all are in the expected-failures allowlist).\x1b[0m' : '\x1b[32mAll tests passed!\x1b[0m'}`)
 process.exit(0)

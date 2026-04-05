@@ -1,10 +1,15 @@
 import { test, expect } from '@playwright/test'
-import { readdirSync, existsSync } from 'node:fs'
+import { readdirSync, existsSync, readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
+
+// Load the expected-failures allowlist
+const expectedFailures = JSON.parse(
+  readFileSync(resolve(__dirname, 'wpt-expected-failures.json'), 'utf8')
+)
 
 // WPT test scripts that are compatible with the polyfill's memory adapter.
 // We skip tests that require browser-specific APIs (postMessage, IndexedDB,
@@ -87,12 +92,17 @@ test.describe('WPT File System Tests', () => {
         }
       }
 
-      // We expect at least some tests to pass, but don't fail the whole
-      // suite if some individual WPT tests fail (since the polyfill may
-      // not implement everything yet).
       expect(results.length).toBeGreaterThan(0)
-      // At least some tests should pass
-      expect(passed.length).toBeGreaterThan(0)
+
+      // Fail if any WPT subtest failure is not in the expected-failures allowlist
+      const allowedFailures = expectedFailures[scriptName] || []
+      const unexpectedFailures = failed.filter(
+        r => !allowedFailures.some(entry => entry.name === r.name)
+      )
+      for (const f of unexpectedFailures) {
+        console.error(`  UNEXPECTED FAILURE: [${scriptName}] ${f.name}${f.message ? ': ' + f.message : ''}`)
+      }
+      expect(unexpectedFailures).toHaveLength(0)
     })
   }
 })

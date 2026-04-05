@@ -1,0 +1,131 @@
+{
+  "FileSystemDirectoryHandle-getDirectoryHandle.js": [
+    {
+      "name": "getDirectoryHandle(create=false) with a path separator when the directory exists",
+      "reason": "Polyfill throws DOMException instead of TypeError for names containing path separators.",
+      "issue": "https://github.com/jimmywarting/native-file-system-adapter/issues"
+    },
+    {
+      "name": "getDirectoryHandle(create=true) with a path separator",
+      "reason": "Polyfill does not reject names containing path separators with TypeError.",
+      "issue": "https://github.com/jimmywarting/native-file-system-adapter/issues"
+    }
+  ],
+  "FileSystemDirectoryHandle-getFileHandle.js": [
+    {
+      "name": "getFileHandle(create=false) with a path separator when the file exists.",
+      "reason": "Polyfill throws DOMException instead of TypeError for names containing path separators.",
+      "issue": "https://github.com/jimmywarting/native-file-system-adapter/issues"
+    },
+    {
+      "name": "getFileHandle(create=true) with a path separator",
+      "reason": "Polyfill does not reject names containing path separators with TypeError.",
+      "issue": "https://github.com/jimmywarting/native-file-system-adapter/issues"
+    }
+  ],
+  "FileSystemDirectoryHandle-removeEntry.js": [
+    {
+      "name": "removeEntry() with a path separator should fail.",
+      "reason": "Polyfill throws DOMException instead of TypeError for names containing path separators.",
+      "issue": "https://github.com/jimmywarting/native-file-system-adapter/issues"
+    },
+    {
+      "name": "removeEntry() while the file has an open writable fails",
+      "reason": "Polyfill does not track open writables to block concurrent removal.",
+      "issue": "https://github.com/jimmywarting/native-file-system-adapter/issues"
+    },
+    {
+      "name": "removeEntry() of a directory while a containing file has an open writable fails",
+      "reason": "Polyfill throws InvalidModificationError instead of NoModificationAllowedError.",
+      "issue": "https://github.com/jimmywarting/native-file-system-adapter/issues"
+    }
+  ],
+  "FileSystemFileHandle-getFile.js": [
+    {
+      "name": "getFile() returns last modified time",
+      "reason": "assert_less_than is not implemented in the Node.js WPT test harness."
+    },
+    {
+      "name": "getFile() returns expected name",
+      "reason": "Node.js file adapter does not preserve the original filename in File.name.",
+      "issue": "https://github.com/jimmywarting/native-file-system-adapter/issues"
+    }
+  ],
+  "FileSystemWritableFileStream.js": [
+    {
+      "name": "createWritable() can be called on two handles representing the same file",
+      "reason": "Test uses getDirectoryHandle on a FileHandle, which is not supported by the polyfill.",
+      "issue": "https://github.com/jimmywarting/native-file-system-adapter/issues"
+    },
+    {
+      "name": "createWritable({keepExistingData: false}): atomic writable file stream initialized with empty file",
+      "reason": "Node.js adapter does not correctly implement keepExistingData=false atomic semantics.",
+      "issue": "https://github.com/jimmywarting/native-file-system-adapter/issues"
+    }
+  ],
+  "FileSystemWritableFileStream-write.js": [
+    {
+      "name": "WriteParams: write null data param",
+      "reason": "Memory adapter does not reject null data with TypeError.",
+      "issue": "https://github.com/jimmywarting/native-file-system-adapter/issues"
+    },
+    {
+      "name": "write() with an invalid blob to an empty file should reject",
+      "reason": "Polyfill does not reject invalid blobs with a NotFoundError DOMException.",
+      "issue": "https://github.com/jimmywarting/native-file-system-adapter/issues"
+    },
+    {
+      "name": "an errored writable stream releases its lock",
+      "reason": "Polyfill does not correctly release the stream lock after a write error.",
+      "issue": "https://github.com/jimmywarting/native-file-system-adapter/issues"
+    },
+    {
+      "name": "atomic writes: writable file streams make atomic changes on close",
+      "reason": "Node.js adapter does not fully implement atomic write-on-close semantics.",
+      "issue": "https://github.com/jimmywarting/native-file-system-adapter/issues"
+    }
+  ],
+  "FileSystemWritableFileStream-piped.js": [
+    {
+      "name": "can be piped to with a string",
+      "reason": "recordingReadableStream is not defined in the Node.js/browser polyfill test environment."
+    },
+    {
+      "name": "can be piped to with an ArrayBuffer",
+      "reason": "recordingReadableStream is not defined in the Node.js/browser polyfill test environment."
+    },
+    {
+      "name": "can be piped to with a Blob",
+      "reason": "recordingReadableStream is not defined in the Node.js/browser polyfill test environment."
+    },
+    {
+      "name": "can be piped to with a param object with write command",
+      "reason": "recordingReadableStream is not defined in the Node.js/browser polyfill test environment."
+    },
+    {
+      "name": "can be piped to with a param object with multiple commands",
+      "reason": "recordingReadableStream is not defined in the Node.js/browser polyfill test environment."
+    },
+    {
+      "name": "multiple operations can be queued",
+      "reason": "recordingReadableStream is not defined in the Node.js/browser polyfill test environment."
+    },
+    {
+      "name": "abort() aborts write",
+      "reason": "Node.js adapter abort behavior differs from the spec.",
+      "issue": "https://github.com/jimmywarting/native-file-system-adapter/issues"
+    }
+  ],
+  "FileSystemBaseHandle-isSameEntry.js": [
+    {
+      "name": "isSameEntry comparing two files pointing to the same path returns true",
+      "reason": "Memory adapter creates independent handle objects; isSameEntry does not compare by path.",
+      "issue": "https://github.com/jimmywarting/native-file-system-adapter/issues"
+    },
+    {
+      "name": "isSameEntry comparing two directories pointing to the same path returns true",
+      "reason": "Memory adapter creates independent handle objects; isSameEntry does not compare by path.",
+      "issue": "https://github.com/jimmywarting/native-file-system-adapter/issues"
+    }
+  ]
+}
