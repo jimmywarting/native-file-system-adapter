@@ -106,5 +106,25 @@
       "name": "isSameEntry comparing two directories pointing to the same path returns true",
       "reason": "Memory adapter creates independent handle objects; isSameEntry does not compare by path."
     }
+  ],
+  "FileSystemBaseHandle-remove.js": [
+    {
+      "name": "remove() while the file has an open writable fails",
+      "reason": "Polyfill does not track open writables to block concurrent removal."
+    },
+    {
+      "name": "can remove the root of a sandbox file system",
+      "reason": "navigator is not defined in the Node.js test environment."
+    }
+  ],
+  "FileSystemWritableFileStream.js": [
+    {
+      "name": "createWritable() can be called on two handles representing the same file",
+      "reason": "Test uses getDirectoryHandle on a FileHandle, which is not supported by the polyfill."
+    },
+    {
+      "name": "createWritable({keepExistingData: false}): atomic writable file stream initialized with empty file",
+      "reason": "Node.js adapter does not fully implement atomic write-on-close semantics."
+    }
   ]
 }

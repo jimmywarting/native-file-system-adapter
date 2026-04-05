@@ -285,11 +285,17 @@ export class FolderHandle {
         if (entries.length > 0) {
           throw new DOMException(...MOD_ERR)
         }
+        await fs.rmdir(path).catch(err => {
+          if (err.code === 'ENOENT') throw new DOMException(...GONE)
+          if (err.code === 'ENOTEMPTY') throw new DOMException(...MOD_ERR)
+          throw err
+        })
+      } else {
+        await fs.rm(path, { recursive: true }).catch(err => {
+          if (err.code === 'ENOTEMPTY') throw new DOMException(...MOD_ERR)
+          throw err
+        })
       }
-      await fs.rm(path, { recursive: !!options.recursive }).catch(err => {
-        if (err.code === 'ENOTEMPTY') throw new DOMException(...MOD_ERR)
-        throw err
-      })
     } else {
       await fs.unlink(path)
     }
