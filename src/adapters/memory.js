@@ -68,6 +68,70 @@ export class Sink extends BlobSink {
   }
 }
 
+/**
+ * A Sink that writes directly into the FileHandle's backing File in-place,
+ * rather than buffering in a separate BlobSink and committing on close.
+ * Writes are immediately visible via getFile(); abort() cannot undo them.
+ */
+export class InPlaceSink {
+  /**
+   * @param {FileHandle} fileHandle
+   */
+  constructor (fileHandle) {
+    this.fileHandle = fileHandle
+    this.size = fileHandle._file.size
+    this._hasLock = true
+    fileHandle._openWritables++
+  }
+
+  _releaseLock () {
+    if (this._hasLock) {
+      this.fileHandle._openWritables--
+      this._hasLock = false
+    }
+  }
+
+  /**
+   * @param {Blob} blob
+   * @param {number} position
+   */
+  write (blob, position) {
+    if (this.fileHandle._deleted) throw new DOMException(...GONE)
+    // @ts-ignore
+    if (blob._handle?._deleted) throw new DOMException(...GONE)
+    const file = this.fileHandle._file
+    const head = file.slice(0, position)
+    const tail = file.slice(position + blob.size)
+    this.fileHandle._file = new File([head, blob, tail], file.name)
+    this.size = this.fileHandle._file.size
+  }
+
+  /**
+   * @param {number} size
+   */
+  truncate (size) {
+    if (this.fileHandle._deleted) throw new DOMException(...GONE)
+    const file = this.fileHandle._file
+    this.fileHandle._file = size < file.size
+      ? new File([file.slice(0, size)], file.name, file)
+      : new File([file, new Uint8Array(size - file.size)], file.name)
+    this.size = this.fileHandle._file.size
+  }
+
+  abort () {
+    // In-place writes cannot be rolled back.
+    this._releaseLock()
+  }
+
+  close () {
+    if (this.fileHandle._deleted) throw new DOMException(...GONE)
+    this._releaseLock()
+    if (this.fileHandle.onclose) {
+      this.fileHandle.onclose(this.fileHandle)
+    }
+  }
+}
+
 export class FileHandle {
   constructor (name = '', file = new File([], name), writable = true, parent = null) {
     this._file = file
@@ -92,6 +156,24 @@ export class FileHandle {
     if (!this.writable) throw new DOMException(...DISALLOWED)
     if (this._deleted) throw new DOMException(...GONE)
 
+    const mode = opts.mode
+
+    // Exclusive modes allow only one writer at a time.
+    if (mode === 'exclusive-atomic' || mode === 'exclusive-in-place') {
+      if (this._openWritables > 0) throw new DOMException(...NO_MOD)
+    }
+
+    if (mode === 'exclusive-in-place') {
+      // Write directly to the backing File — no separate buffer, no commit on close.
+      // If keepExistingData is false, truncate to empty immediately.
+      if (!opts.keepExistingData) {
+        this._file = new File([], this.name)
+      }
+      return new InPlaceSink(this)
+    }
+
+    // 'exclusive-atomic' and 'siloed' (default when mode is undefined) both buffer
+    // writes in a BlobSink and commit atomically on close().
     const file = opts.keepExistingData
       ? await this.getFile()
       : new File([], this.name)

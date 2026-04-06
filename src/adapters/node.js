@@ -36,14 +36,16 @@ export class Sink {
    * @param {string} dirPath
    * @param {string} path
    * @param {string} tempPath
+   * @param {boolean} [inPlace] - When true, writes go directly to the real file (no rename on close).
    */
-  constructor (fileHandle, size, dirPath, path, tempPath) {
+  constructor (fileHandle, size, dirPath, path, tempPath, inPlace = false) {
     this._fileHandle = fileHandle
     /** Exposed so FileSystemWritableFileStream can read the initial file size. */
     this.size = size
     this._dirPath = dirPath
     this._path = path
     this._tempPath = tempPath
+    this._inPlace = inPlace
     openWritables.set(path, (openWritables.get(path) || 0) + 1)
   }
 
@@ -56,7 +58,9 @@ export class Sink {
 
   async abort() {
     await this._fileHandle.close()
-    await fs.unlink(this._tempPath).catch(() => {})
+    if (!this._inPlace) {
+      await fs.unlink(this._tempPath).catch(() => {})
+    }
     openWritables.set(this._path, openWritables.get(this._path) - 1)
   }
 
@@ -101,9 +105,10 @@ export class Sink {
   }
 
   async close () {
-    // First make sure we close the handle
     await this._fileHandle.close()
-    await fs.rename(this._tempPath, this._path)
+    if (!this._inPlace) {
+      await fs.rename(this._tempPath, this._path)
+    }
     openWritables.set(this._path, openWritables.get(this._path) - 1)
   }
 }
@@ -138,8 +143,32 @@ export class FileHandle {
     return this._path
   }
 
-  /** @param {{ keepExistingData: boolean; }} opts */
+  /**
+   * @param {{ keepExistingData?: boolean; mode?: 'exclusive-atomic' | 'exclusive-in-place' | 'siloed' }} opts
+   */
   async createWritable (opts) {
+    const mode = opts.mode
+
+    // Exclusive modes allow only one writer at a time.
+    if (mode === 'exclusive-atomic' || mode === 'exclusive-in-place') {
+      if (isLocked(this._path)) throw new DOMException(...NO_MOD)
+    }
+
+    if (mode === 'exclusive-in-place') {
+      // Write directly to the real file — no temp file, no rename on close.
+      // If keepExistingData is false, truncate to 0 on open.
+      const fileHandle = await fs.open(this._path, 'r+').catch(err => {
+        if (err.code === 'ENOENT') throw new DOMException(...GONE)
+        throw err
+      })
+      if (!opts.keepExistingData) {
+        await fileHandle.truncate(0)
+      }
+      const { size } = await fileHandle.stat()
+      return new Sink(fileHandle, size, dirname(this._path), this._path, this._path, true)
+    }
+
+    // 'exclusive-atomic' and 'siloed' (default when mode is undefined) both use a temp file.
     const tempPath = this._path + '.' + Math.random().toString(36).slice(2) + '.tmp'
     if (opts.keepExistingData) {
       await fs.copyFile(this._path, tempPath).catch(err => {
