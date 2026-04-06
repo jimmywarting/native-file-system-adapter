@@ -42,16 +42,6 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
         : new FileSystemDirectoryHandle(entry)]
   }
 
-  /** @deprecated use .entries() instead */
-  async * getEntries() {
-    const {FileSystemFileHandle} = await import('./FileSystemFileHandle.js')
-    console.warn('deprecated, use .entries() instead')
-    for await (let entry of this[kAdapter].entries())
-      yield entry.kind === 'file'
-        ? new FileSystemFileHandle(entry)
-        : new FileSystemDirectoryHandle(entry)
-  }
-
   /**
    * @param {string} name Name of the file
    * @param {object} [options]

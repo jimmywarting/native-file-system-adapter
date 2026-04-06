@@ -5,7 +5,7 @@ export class FileSystemDirectoryHandle extends FileSystemHandle {
         create?: boolean;
     }): Promise<FileSystemDirectoryHandle>;
     entries(): AsyncGenerator<[string, FileSystemHandle | FileSystemDirectoryHandle]>;
-    getEntries(): AsyncGenerator<import("./FileSystemFileHandle.js").default | FileSystemDirectoryHandle, void, unknown>;
+
     getFileHandle(name: string, options?: {
         create?: boolean;
     }): Promise<import("./FileSystemFileHandle.js").default>;

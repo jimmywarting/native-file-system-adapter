@@ -8,15 +8,13 @@ const native = globalThis.showOpenFilePicker
  * @param {boolean} [options.multiple] If you want to allow more than one file
  * @param {boolean} [options.excludeAcceptAllOption=false] Prevent user for selecting any
  * @param {Object[]} [options.accepts] Files you want to accept
- * @param {boolean} [options._preferPolyfill] Deprecated. Use _preferredMethods instead.
  * @param {('native' | 'input')[]} [options._preferredMethods] Ordered list of preferred methods
  * @returns {Promise<FileSystemFileHandle[]>}
  */
 async function showOpenFilePicker (options = {}) {
   const opts = { ...def, ...options }
 
-  // Backward compat: convert _preferPolyfill to _preferredMethods
-  const methods = options._preferredMethods || (options._preferPolyfill ? ['input'] : ['native', 'input'])
+  const methods = options._preferredMethods || ['native', 'input']
 
   for (const method of methods) {
     if (method === 'native' && native) {
