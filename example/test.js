@@ -117,8 +117,6 @@ form_showDirectoryPicker.onsubmit = evt => {
   evt.preventDefault()
   /** @type {Object<string, *>} */
   const opts = Object.fromEntries([...new FormData(evt.target)])
-  opts._preferPolyfill = !!opts._preferPolyfill
-  if (opts._preferPolyfill) opts._preferredMethods = ['input']
   showDirectoryPicker(opts).then(showFileStructure, console.error)
 }
 form_showOpenFilePicker.onsubmit = evt => {
@@ -126,8 +124,6 @@ form_showOpenFilePicker.onsubmit = evt => {
   /** @type {Object<string, *>} */
   const opts = Object.fromEntries([...new FormData(evt.target)])
   opts.types = JSON.parse(opts.types || '""')
-  opts._preferPolyfill = !!opts._preferPolyfill
-  if (opts._preferPolyfill) opts._preferredMethods = ['input']
   showOpenFilePicker(opts).then(handles => {
     console.log(handles)
     alert(handles)
@@ -141,8 +137,6 @@ form_showSaveFilePicker.onsubmit = async evt => {
   /** @type {Object<string, *>} */
   const opts = Object.fromEntries([...new FormData(evt.target)])
   opts.types = JSON.parse(opts.types || '""')
-  opts._preferPolyfill = !!opts._preferPolyfill
-  if (opts._preferPolyfill) opts._preferredMethods = ['constructing-blob']
   const handle = await showSaveFilePicker(opts)
   const format = handle.name.split('.').pop()
   const image = await img(format)
@@ -210,9 +204,7 @@ async function showFileStructure (root) {
   const result = []
   let cwd = ''
 
-  /** @type {HTMLInputElement} */
-  const input = document.querySelector('[form=form_showOpenFilePicker][name="_preferPolyfill"]')
-  const readonly = input.checked
+  const readonly = false
 
   try {
     readonly && assert(await getDirectoryEntryCount(root) > 0)
