@@ -1,20 +1,19 @@
 import { errors } from '../util.js'
 import config from '../config.js'
+import { BlobSink } from './blobsink.js'
 
 const { File, Blob, DOMException } = config
-const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX, SECURITY, DISALLOWED, NO_MOD } = errors
+const { GONE, MISMATCH, MOD_ERR, SYNTAX, DISALLOWED, NO_MOD } = errors
 
-export class Sink {
+export class Sink extends BlobSink {
 
   /**
    * @param {FileHandle} fileHandle
    * @param {File} file
    */
   constructor (fileHandle, file) {
+    super(file)
     this.fileHandle = fileHandle
-    this.file = file
-    this.size = file.size
-    this.position = 0
     this._hasLock = true
     this.fileHandle._openWritables++
   }
@@ -26,112 +25,43 @@ export class Sink {
     }
   }
 
-  write (chunk) {
+  /**
+   * Write a Blob at the given position (called by the outer
+   * FileSystemWritableFileStream after WriteParams have been parsed).
+   *
+   * @param {Blob} blob
+   * @param {number} position
+   */
+  write (blob, position) {
     if (this.fileHandle._deleted) throw new DOMException(...GONE)
-    let file = this.file
-
+    // @ts-ignore
+    if (blob._handle?._deleted) throw new DOMException(...GONE)
     try {
-      if (typeof chunk === 'object' && chunk !== null && !(chunk instanceof Blob) && !ArrayBuffer.isView(chunk) && !(chunk instanceof ArrayBuffer)) {
-        if (chunk.type === 'write') {
-          if (Number.isInteger(chunk.position) && chunk.position >= 0) {
-            this.position = chunk.position
-            if (this.size < chunk.position) {
-              this.file = new File(
-                [this.file, new ArrayBuffer(chunk.position - this.size)],
-                this.file.name,
-                this.file
-              )
-            }
-          }
-          if (!('data' in chunk)) {
-            throw new DOMException(...SYNTAX('write requires a data argument'))
-          }
-          chunk = chunk.data
-        } else if (chunk.type === 'seek') {
-          if (Number.isInteger(chunk.position) && chunk.position >= 0) {
-            if (this.size < chunk.position) {
-              throw new DOMException(...INVALID)
-            }
-            this.position = chunk.position
-            return
-          } else {
-            throw new DOMException(...SYNTAX('seek requires a position argument'))
-          }
-        } else if (chunk.type === 'truncate') {
-          if (Number.isInteger(chunk.size) && chunk.size >= 0) {
-            file = chunk.size < this.size
-              ? new File([file.slice(0, chunk.size)], file.name, file)
-              : new File([file, new Uint8Array(chunk.size - this.size)], file.name)
-
-            this.size = file.size
-            if (this.position > file.size) {
-              this.position = file.size
-            }
-            this.file = file
-            return
-          } else {
-            throw new DOMException(...SYNTAX('truncate requires a size argument'))
-          }
-        } else {
-          // If it's an object but not a Blob, BufferSource, or valid WriteParams, it's invalid.
-          throw new TypeError('Invalid data passed to write()')
-        }
-      }
-
-      if (chunk === null || (typeof chunk !== 'string' && !(chunk instanceof Blob) && !ArrayBuffer.isView(chunk) && !(chunk instanceof ArrayBuffer))) {
-        throw new TypeError('Invalid data passed to write()')
-      }
-
-      if (chunk instanceof Blob && chunk._handle?._deleted) {
-        throw new DOMException(...GONE)
-      }
-
-      chunk = new Blob([chunk])
-
-      let blob = this.file
-      // Calc the head and tail fragments
-      const head = blob.slice(0, this.position)
-      const tail = blob.slice(this.position + chunk.size)
-
-      // Calc the padding
-      let padding = this.position - head.size
-      if (padding < 0) {
-        padding = 0
-      }
-      try {
-        blob = new File([
-          head,
-          new Uint8Array(padding),
-          chunk,
-          tail
-        ], blob.name)
-      } catch (err) {
-        throw new DOMException(...GONE)
-      }
-
-      this.size = blob.size
-      this.position += chunk.size
-
-      this.file = blob
-    } catch (err) {
+      super.write(blob, position)
+    } catch (_err) {
       this._releaseLock()
-      throw err
+      throw new DOMException(...GONE)
     }
   }
+
+  /**
+   * @param {number} size
+   */
+  truncate (size) {
+    if (this.fileHandle._deleted) throw new DOMException(...GONE)
+    super.truncate(size)
+  }
+
   abort () {
     if (this.fileHandle._deleted) throw new DOMException(...GONE)
     this._releaseLock()
-    this.file =
-    this.position =
-    this.size = null
+    this.file = this.size = null
   }
   close () {
     if (this.fileHandle._deleted) throw new DOMException(...GONE)
     this.fileHandle._file = this.file
     this._releaseLock()
-    this.file =
-    this.position =
-    this.size = null
+    this.file = this.size = null
     if (this.fileHandle.onclose) {
       this.fileHandle.onclose(this.fileHandle)
     }
