@@ -29,64 +29,71 @@ class FileSystemWritableFileStream extends WritableStream {
 
     const underlyingSink = {
       async write (chunk) {
-        // ── WriteParams dispatch ──────────────────────────────────────────
-        if (
-          typeof chunk === 'object' &&
-          chunk !== null &&
-          !(chunk instanceof BlobCtor) &&
-          !ArrayBuffer.isView(chunk) &&
-          !(chunk instanceof ArrayBuffer)
-        ) {
-          if (chunk.type === 'write') {
-            // Validate before any side-effects.
-            if (!('data' in chunk)) {
-              throw new DOMException(...SYNTAX('write requires a data argument'))
-            }
-            if (Number.isInteger(chunk.position) && chunk.position >= 0) {
-              // Extend the file with zeros if the target position is past EOF.
-              if (size < chunk.position) {
-                await sink.truncate(chunk.position)
-                size = chunk.position
-              }
-              position = chunk.position
-            }
-            chunk = chunk.data
-          } else if (chunk.type === 'seek') {
-            if (Number.isInteger(chunk.position) && chunk.position >= 0) {
-              if (size < chunk.position) throw new DOMException(...INVALID)
-              position = chunk.position
-              return
-            }
-            throw new DOMException(...SYNTAX('seek requires a position argument'))
-          } else if (chunk.type === 'truncate') {
-            if (Number.isInteger(chunk.size) && chunk.size >= 0) {
-              await sink.truncate(chunk.size)
-              size = chunk.size
-              if (position > size) position = size
-              return
-            }
-            throw new DOMException(...SYNTAX('truncate requires a size argument'))
-          } else {
-            throw new TypeError('Invalid data passed to write()')
-          }
-        }
-
-        // ── Raw-data write ────────────────────────────────────────────────
-        if (
-          chunk === null ||
-          (typeof chunk !== 'string' &&
+        try {
+          // ── WriteParams dispatch ──────────────────────────────────────────
+          if (
+            typeof chunk === 'object' &&
+            chunk !== null &&
             !(chunk instanceof BlobCtor) &&
             !ArrayBuffer.isView(chunk) &&
-            !(chunk instanceof ArrayBuffer))
-        ) {
-          throw new TypeError('Invalid data passed to write()')
-        }
+            !(chunk instanceof ArrayBuffer)
+          ) {
+            if (chunk.type === 'write') {
+              // Validate before any side-effects.
+              if (!('data' in chunk)) {
+                throw new DOMException(...SYNTAX('write requires a data argument'))
+              }
+              if (Number.isInteger(chunk.position) && chunk.position >= 0) {
+                // Extend the file with zeros if the target position is past EOF.
+                if (size < chunk.position) {
+                  await sink.truncate(chunk.position)
+                  size = chunk.position
+                }
+                position = chunk.position
+              }
+              chunk = chunk.data
+            } else if (chunk.type === 'seek') {
+              if (Number.isInteger(chunk.position) && chunk.position >= 0) {
+                if (size < chunk.position) throw new DOMException(...INVALID)
+                position = chunk.position
+                return
+              }
+              throw new DOMException(...SYNTAX('seek requires a position argument'))
+            } else if (chunk.type === 'truncate') {
+              if (Number.isInteger(chunk.size) && chunk.size >= 0) {
+                await sink.truncate(chunk.size)
+                size = chunk.size
+                if (position > size) position = size
+                return
+              }
+              throw new DOMException(...SYNTAX('truncate requires a size argument'))
+            } else {
+              throw new TypeError('Invalid data passed to write()')
+            }
+          }
 
-        // Normalise to a Blob so adapters only need to handle one type.
-        const blob = chunk instanceof BlobCtor ? chunk : new BlobCtor([chunk])
-        await sink.write(blob, position)
-        position += blob.size
-        size = Math.max(size, position)
+          // ── Raw-data write ────────────────────────────────────────────────
+          if (
+            chunk === null ||
+            (typeof chunk !== 'string' &&
+              !(chunk instanceof BlobCtor) &&
+              !ArrayBuffer.isView(chunk) &&
+              !(chunk instanceof ArrayBuffer))
+          ) {
+            throw new TypeError('Invalid data passed to write()')
+          }
+
+          // Normalise to a Blob so adapters only need to handle one type.
+          const blob = chunk instanceof BlobCtor ? chunk : new BlobCtor([chunk])
+          await sink.write(blob, position)
+          position += blob.size
+          size = Math.max(size, position)
+        } catch (err) {
+          try {
+            await sink.abort(err)
+          } catch {}
+          throw err
+        }
       },
 
       async close () {
