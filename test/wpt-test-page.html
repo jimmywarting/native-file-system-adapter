@@ -213,8 +213,11 @@
 
     const root = await getOriginPrivateDirectory(import('/src/adapters/memory.js'));
 
-    // Override navigator.storage.getDirectory to use the polyfill root
-    // so that promise_tests that call navigator.storage.getDirectory() use our polyfill
+    // Override navigator.storage.getDirectory to use the polyfill root.
+    // This ensures that promise_tests (like "can remove the root of a sandbox
+    // file system" in FileSystemBaseHandle-remove.js) that call
+    // navigator.storage.getDirectory() directly use our polyfill instead of
+    // the native OPFS, which may not support remove() in all browsers (e.g. Firefox).
     try {
       Object.defineProperty(navigator.storage, 'getDirectory', {
         value: async () => root,
@@ -222,7 +225,7 @@
         configurable: true,
       });
     } catch (e) {
-      // Ignore if navigator.storage.getDirectory cannot be overridden
+      // Ignore if navigator.storage.getDirectory cannot be overridden in this browser
     }
 
     function directory_test(func, description) {
