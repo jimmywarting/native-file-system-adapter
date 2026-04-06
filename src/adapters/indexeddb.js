@@ -67,6 +67,13 @@ class FileHandle {
     return this._id === other._id
   }
 
+  getUniqueId () {
+    // IDB keys are unique per entry; prefix 'f' (file) to distinguish from
+    // directories that could share the same numeric key value.
+    const raw = ('f' + this._id.toString(16)).padStart(32, '0')
+    return `${raw.slice(0, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}-${raw.slice(16, 20)}-${raw.slice(20, 32)}`
+  }
+
   async getFile () {
     /** @type {File} */
     const file = await new Promise((resolve, reject) => {
@@ -158,6 +165,13 @@ class FolderHandle {
   /** @param {FolderHandle} other  */
   isSameEntry (other) {
     return this._id === other._id
+  }
+
+  getUniqueId () {
+    // IDB keys are unique per entry; prefix 'd' (directory) to distinguish from
+    // files that could share the same numeric key value.
+    const raw = ('d' + this._id.toString(16)).padStart(32, '0')
+    return `${raw.slice(0, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}-${raw.slice(16, 20)}-${raw.slice(20, 32)}`
   }
 
   /**

@@ -63,6 +63,18 @@ class FileSystemHandle {
     await this[kAdapter].remove(options)
   }
 
+  async getUniqueId () {
+    const adapter = this[kAdapter]
+    if (adapter.getUniqueId) {
+      return adapter.getUniqueId()
+    }
+    // Fallback: generate a random UUID v4 once and cache it on the adapter object.
+    if (!adapter._uniqueId) {
+      adapter._uniqueId = crypto.randomUUID()
+    }
+    return adapter._uniqueId
+  }
+
   /**
    * @param {FileSystemHandle} other
    */

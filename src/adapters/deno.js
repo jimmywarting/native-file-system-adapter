@@ -3,6 +3,21 @@ import { errors } from '../util.js'
 
 const { GONE, MISMATCH, MOD_ERR, NO_MOD } = errors
 
+/**
+ * Returns a stable UUID-format unique ID derived from the file-system kind and
+ * absolute path using SHA-256 via the Web Crypto API.
+ *
+ * @param {string} kind - 'file' | 'directory'
+ * @param {string} path
+ * @returns {Promise<string>}
+ */
+async function pathToUUID (kind, path) {
+  const data = new TextEncoder().encode(`${kind}:${path}`)
+  const hashBuf = await crypto.subtle.digest('SHA-256', data)
+  const hex = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`
+}
+
 /** @param {string} path */
 function fileFrom (path) {
   const e = Deno.readFileSync(path)
@@ -112,6 +127,10 @@ export class FileHandle {
     return this.#path
   }
 
+  getUniqueId () {
+    return pathToUUID(this.kind, this.#path)
+  }
+
   /**
    * @param {{ keepExistingData?: boolean; mode?: 'exclusive-atomic' | 'exclusive-in-place' | 'siloed' }} opts
    */
@@ -208,6 +227,10 @@ export class FolderHandle {
 
   #getPath() {
     return this.#path
+  }
+
+  getUniqueId () {
+    return pathToUUID(this.kind, this.#path)
   }
 
   /** @returns {AsyncGenerator<[string, FileHandle | FolderHandle]>} */
