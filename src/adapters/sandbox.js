@@ -108,6 +108,15 @@ export class FileHandle {
       }, reject)
     )
   }
+
+  async move (dest, newName) {
+    const name = newName || this.name
+    const destDir = dest ? dest.dir : await new Promise((resolve, reject) => this.file.getParent(resolve, reject))
+
+    return new Promise((resolve, reject) => {
+      this.file.moveTo(destDir, name, resolve, reject)
+    })
+  }
 }
 
 export class FolderHandle {
@@ -178,6 +187,14 @@ export class FolderHandle {
       } else if (entry.file) {
         entry.file.remove(() => resolve(), reject)
       }
+    })
+  }
+
+  async remove (opts = {}) {
+    return new Promise((resolve, reject) => {
+      opts.recursive
+        ? this.dir.removeRecursively(() => resolve(), reject)
+        : this.dir.remove(() => resolve(), reject)
     })
   }
 }

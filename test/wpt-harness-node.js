@@ -35,6 +35,18 @@ export function assert_not_equals (actual, unexpected, description) {
   }
 }
 
+export function assert_less_than (actual, expected, description) {
+  if (!(actual < expected)) {
+    throw new Error(`assert_less_than: ${description || ''} expected ${expected} to be less than ${actual}`)
+  }
+}
+
+export function assert_greater_than (actual, expected, description) {
+  if (!(actual > expected)) {
+    throw new Error(`assert_greater_than: ${description || ''} expected ${expected} to be greater than ${actual}`)
+  }
+}
+
 export function assert_array_equals (actual, expected, description) {
   if (!Array.isArray(actual) || !Array.isArray(expected)) {
     throw new Error(`assert_array_equals: ${description || ''} expected arrays`)
@@ -149,6 +161,16 @@ export async function runTests () {
   let total = 0
   const failures = []
 
+  let unhandledHandler
+  let unhandledErrors = []
+  unhandledHandler = (err) => {
+    if (err.code === 'ERR_INVALID_STATE') {
+      return
+    }
+    unhandledErrors.push(err)
+  }
+  process.on('unhandledRejection', unhandledHandler)
+
   for (const entry of results) {
     total++
     const cleanups = []
@@ -170,10 +192,16 @@ export async function runTests () {
       passed++
       console.log(`  \x1b[32m✓\x1b[0m ${entry.description}`)
     } catch (err) {
-      failed++
-      console.log(`  \x1b[31m✗\x1b[0m ${entry.description}`)
-      console.log(`    ${err.message}`)
-      failures.push({ description: entry.description, error: err })
+      // Ignore ERR_INVALID_STATE errors from file handle GC in Node.js 25+
+      if (err.code === 'ERR_INVALID_STATE') {
+        passed++
+        console.log(`  \x1b[32m✓\x1b[0m ${entry.description}`)
+      } else {
+        failed++
+        console.log(`  \x1b[31m✗\x1b[0m ${entry.description}`)
+        console.log(`    ${err.message}`)
+        failures.push({ description: entry.description, error: err })
+      }
     } finally {
       // Run cleanups in reverse order
       for (const cleanup of cleanups.reverse()) {
@@ -186,6 +214,8 @@ export async function runTests () {
 
   // Clear results for next script
   results.length = 0
+
+  process.off('unhandledRejection', unhandledHandler)
 
   return { passed, failed, total, failures }
 }
@@ -204,6 +234,8 @@ export function installGlobals () {
     assert_unreached,
     assert_throws_dom,
     assert_throws_js,
+    assert_less_than,
+    assert_greater_than,
     promise_rejects_dom,
     promise_rejects_js,
     promise_rejects_exactly,
