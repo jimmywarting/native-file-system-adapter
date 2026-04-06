@@ -38,6 +38,10 @@ class FileSystemWritableFileStream extends WritableStream {
           !(chunk instanceof ArrayBuffer)
         ) {
           if (chunk.type === 'write') {
+            // Validate before any side-effects.
+            if (!('data' in chunk)) {
+              throw new DOMException(...SYNTAX('write requires a data argument'))
+            }
             if (Number.isInteger(chunk.position) && chunk.position >= 0) {
               // Extend the file with zeros if the target position is past EOF.
               if (size < chunk.position) {
@@ -45,9 +49,6 @@ class FileSystemWritableFileStream extends WritableStream {
                 size = chunk.position
               }
               position = chunk.position
-            }
-            if (!('data' in chunk)) {
-              throw new DOMException(...SYNTAX('write requires a data argument'))
             }
             chunk = chunk.data
           } else if (chunk.type === 'seek') {
