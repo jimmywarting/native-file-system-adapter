@@ -7,6 +7,7 @@
   "FileSystemWritableFileStream-piped.js": [],
   "FileSystemBaseHandle-isSameEntry.js": [],
   "FileSystemBaseHandle-remove.js": [],
+  "FileSystemBaseHandle-getUniqueId.js": [],
   "FileSystemFileHandle-move.js": [],
   "FileSystemWritableFileStream.js": [],
   "FileSystemWritableFileStream-mode.js": []

@@ -1,6 +1,7 @@
 import { openAsBlob } from 'node:fs'
 import fs from 'node:fs/promises'
 import { join, dirname } from 'node:path'
+import { createHash } from 'node:crypto'
 import { errors } from '../util.js'
 
 import config from '../config.js'
@@ -10,6 +11,22 @@ const {
 } = config
 
 const { GONE, MISMATCH, MOD_ERR, NO_MOD } = errors
+
+/**
+ * Returns a stable UUID-format unique ID derived from the file-system kind and
+ * absolute path.  Two handles pointing at the same entry always produce the
+ * same string; a file and a directory that share a path (after the file is
+ * removed and a directory is created) produce different strings because `kind`
+ * is included in the hash input.
+ *
+ * @param {string} kind - 'file' | 'directory'
+ * @param {string} path
+ * @returns {string}
+ */
+function pathToUUID (kind, path) {
+  const hash = createHash('sha256').update(`${kind}:${path}`).digest('hex')
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`
+}
 
 const openWritables = new Map()
 
@@ -143,6 +160,10 @@ export class FileHandle {
     return this._path
   }
 
+  getUniqueId () {
+    return pathToUUID(this.kind, this._path)
+  }
+
   /**
    * @param {{ keepExistingData?: boolean; mode?: 'exclusive-atomic' | 'exclusive-in-place' | 'siloed' }} opts
    */
@@ -235,6 +256,10 @@ export class FolderHandle {
   /** @param {FolderHandle} other */
   async isSameEntry (other) {
     return this._path === other._path
+  }
+
+  getUniqueId () {
+    return pathToUUID(this.kind, this._path)
   }
 
   /** @returns {AsyncGenerator<[string, FileHandle | FolderHandle]>} */

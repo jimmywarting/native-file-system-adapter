@@ -243,7 +243,6 @@ try {
 const SKIP_REASONS = {
   'FileSystemObserver.js': 'FileSystemObserver not implemented',
   'FileSystemObserver-writable-file-stream.js': 'FileSystemObserver not implemented',
-  'FileSystemBaseHandle-getUniqueId.js': 'Unique IDs not implemented',
   'FileSystemFileHandle-create-sync-access-handle.js': 'SyncAccessHandle is OPFS-only',
   'FileSystemSyncAccessHandle-flush.js': 'SyncAccessHandle is OPFS-only',
   'FileSystemBaseHandle-buckets.js': 'Storage buckets API not applicable',
@@ -271,6 +270,7 @@ const SUPPORTED_SCRIPTS = [
   'FileSystemBaseHandle-isSameEntry.js',
   'FileSystemBaseHandle-remove.js',
   'FileSystemFileHandle-move.js',
+  'FileSystemBaseHandle-getUniqueId.js',
 ]
 
 const wptDir = resolve(ROOT, 'wpt', 'fs', 'script-tests')

@@ -5,6 +5,21 @@ import { BlobSink } from './blobsink.js'
 
 const { GONE, MISMATCH, MOD_ERR } = errors
 
+/**
+ * Returns a stable UUID-format unique ID derived from the entry kind and cache
+ * path using SHA-256 via the Web Crypto API.
+ *
+ * @param {string} kind - 'file' | 'directory'
+ * @param {string} path
+ * @returns {Promise<string>}
+ */
+async function pathToUUID (kind, path) {
+  const data = new TextEncoder().encode(`${kind}:${path}`)
+  const hashBuf = await crypto.subtle.digest('SHA-256', data)
+  const hex = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`
+}
+
 const DIR = { headers: { 'content-type': 'dir' } }
 const FILE = () => ({ headers: { 'content-type': 'file', 'last-modified': Date.now() } })
 const hasOwn = Object.prototype.hasOwnProperty
@@ -47,6 +62,10 @@ export class FileHandle {
   /** @param {FileHandle} other */
   async isSameEntry (other) {
     return this.path === other.path
+  }
+
+  getUniqueId () {
+    return pathToUUID(this.kind, this.path)
   }
 
   async getFile () {
@@ -102,6 +121,10 @@ export class FolderHandle {
   /** @param {FolderHandle} other  */
   async isSameEntry (other) {
     return this._dir === other._dir
+  }
+
+  getUniqueId () {
+    return pathToUUID(this.kind, this._dir)
   }
 
   /**
