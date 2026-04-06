@@ -10,19 +10,44 @@ function fileFrom (path) {
   return new File([new Blob([e], { type: 'application/octet-stream' })], basename(path), { lastModified: Number(s.mtime) })
 }
 
+const openWritables = new Map()
+
+/**
+ * @param {string} path
+ */
+function isLocked (path) {
+  for (const [lockedPath, count] of openWritables) {
+    if (count > 0 && (lockedPath === path || lockedPath.startsWith(path + '/'))) {
+      return true
+    }
+  }
+  return false
+}
+
 export class Sink {
   /**
-   * @param {Deno.File} fileHandle
+   * @param {Deno.FsFile} fileHandle
    * @param {number} size
+   * @param {string} path
+   * @param {string} tempPath
+   * @param {boolean} [inPlace]
    */
-  constructor (fileHandle, size) {
+  constructor (fileHandle, size, path, tempPath, inPlace = false) {
     this.fileHandle = fileHandle
     /** Exposed so FileSystemWritableFileStream can read the initial file size. */
     this.size = size
+    this._path = path
+    this._tempPath = tempPath
+    this._inPlace = inPlace
+    openWritables.set(path, (openWritables.get(path) || 0) + 1)
   }
 
   async abort () {
     await this.fileHandle.close()
+    if (!this._inPlace) {
+      await Deno.remove(this._tempPath).catch(() => {})
+    }
+    openWritables.set(this._path, openWritables.get(this._path) - 1)
   }
 
   /**
@@ -52,6 +77,10 @@ export class Sink {
 
   async close () {
     await this.fileHandle.close()
+    if (!this._inPlace) {
+      await Deno.rename(this._tempPath, this._path)
+    }
+    openWritables.set(this._path, openWritables.get(this._path) - 1)
   }
 }
 
@@ -83,15 +112,50 @@ export class FileHandle {
     return this.#path
   }
 
-  /** @param {{ keepExistingData: boolean; }} opts */
+  /**
+   * @param {{ keepExistingData?: boolean; mode?: 'exclusive-atomic' | 'exclusive-in-place' | 'siloed' }} opts
+   */
   async createWritable (opts) {
+    const mode = opts.mode
+
+    // Exclusive modes allow only one writer at a time.
+    if (mode === 'exclusive-atomic' || mode === 'exclusive-in-place') {
+      if (isLocked(this.#path)) throw new DOMException(...NO_MOD)
+    }
+
+    if (mode === 'exclusive-atomic') {
+      // Write to a temp file and rename atomically on close.
+      const tempPath = this.#path + '.' + Math.random().toString(36).slice(2) + '.tmp'
+      if (opts.keepExistingData) {
+        await Deno.copyFile(this.#path, tempPath).catch(err => {
+          if (err.name === 'NotFound') throw new DOMException(...GONE)
+          throw err
+        })
+      }
+      const fileHandle = await Deno.open(tempPath, {
+        write: true,
+        create: true,
+        truncate: !opts.keepExistingData,
+      }).catch(err => {
+        if (err.name === 'NotFound') throw new DOMException(...GONE)
+        throw err
+      })
+      const { size } = await fileHandle.stat()
+      return new Sink(fileHandle, size, this.#path, tempPath, false)
+    }
+
+    // 'exclusive-in-place', 'siloed', and the default (undefined mode) all write directly
+    // to the real file — Deno's native in-place I/O model.  Note that for 'siloed', this
+    // means each concurrent writer shares the same underlying file descriptor rather than
+    // having its own independent swap buffer; 'exclusive-atomic' is the mode to use when
+    // true independent-buffer / last-close-wins semantics are required.
     const fileHandle = await Deno.open(this.#path, { write: true, truncate: !opts.keepExistingData }).catch(err => {
       if (err.name === 'NotFound') throw new DOMException(...GONE)
       throw err
     })
 
     const { size } = await fileHandle.stat()
-    return new Sink(fileHandle, size)
+    return new Sink(fileHandle, size, this.#path, this.#path, true)
   }
 
   async move (dest, newName) {

@@ -18,6 +18,17 @@ class FileSystemFileHandle extends FileSystemHandle {
   /**
    * @param  {Object} [options={}]
    * @param  {boolean} [options.keepExistingData]
+   * @param  {'exclusive-atomic' | 'exclusive-in-place' | 'siloed'} [options.mode]
+   *   Controls the write strategy and concurrency semantics (adapter-specific).
+   *   - `'exclusive-atomic'`: Only one writable at a time; writes go to a
+   *     temporary swap file committed atomically on `close()`.
+   *   - `'exclusive-in-place'`: Only one writable at a time; writes go
+   *     directly to the underlying file.  `abort()` cannot undo already-written data.
+   *   - `'siloed'`: Multiple writables may be open simultaneously; each uses its
+   *     own independent buffer where supported (memory/node), or the adapter's
+   *     native write model (e.g. deno writes in-place).  Last `close()` wins.
+   *   When omitted the adapter uses its own default strategy: memory and node use
+   *   siloed (swap buffer per writer); deno writes in-place with no lock.
    * @returns {Promise<FileSystemWritableFileStream>}
    */
   async createWritable (options = {}) {

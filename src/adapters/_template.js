@@ -72,7 +72,7 @@ export class FileHandle {
 
   /**
    * @public - Publicly available to the wrapper
-   * @param {{ keepExistingData: boolean }} opts
+   * @param {{ keepExistingData?: boolean; mode?: 'exclusive-atomic' | 'exclusive-in-place' | 'siloed' }} opts
    * @returns {Promise<Sink>}  A Sink with: size (number), write(blob, position), truncate(size), close(), abort()
    */
   async createWritable (opts) {
