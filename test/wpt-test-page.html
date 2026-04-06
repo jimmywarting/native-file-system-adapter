@@ -218,14 +218,23 @@
     // file system" in FileSystemBaseHandle-remove.js) that call
     // navigator.storage.getDirectory() directly use our polyfill instead of
     // the native OPFS, which may not support remove() in all browsers (e.g. Firefox).
+    // Safari (WebKit) may not have navigator.storage at all, so handle both cases.
     try {
-      Object.defineProperty(navigator.storage, 'getDirectory', {
-        value: async () => root,
-        writable: true,
-        configurable: true,
-      });
+      if (navigator.storage == null) {
+        Object.defineProperty(navigator, 'storage', {
+          value: { getDirectory: async () => root },
+          writable: true,
+          configurable: true,
+        });
+      } else {
+        Object.defineProperty(navigator.storage, 'getDirectory', {
+          value: async () => root,
+          writable: true,
+          configurable: true,
+        });
+      }
     } catch (e) {
-      // Ignore if navigator.storage.getDirectory cannot be overridden in this browser
+      // Ignore if navigator.storage cannot be overridden in this browser
     }
 
     function directory_test(func, description) {
