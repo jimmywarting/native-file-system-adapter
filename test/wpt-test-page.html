@@ -80,18 +80,44 @@
       return result;
     }
 
-    async function createDirectory(name, parent) {
-      return await parent.getDirectoryHandle(name, { create: true });
+    async function createDirectory(tOrName, nameOrParent, parent) {
+      let name, actualParent;
+      if (typeof tOrName === 'string') {
+        name = tOrName;
+        actualParent = nameOrParent;
+      } else {
+        name = nameOrParent;
+        actualParent = parent;
+      }
+      return await actualParent.getDirectoryHandle(name, { create: true });
     }
 
-    async function createEmptyFile(name, parent) {
-      const handle = await parent.getFileHandle(name, { create: true });
+    async function createEmptyFile(tOrName, nameOrParent, parent) {
+      let name, actualParent;
+      if (typeof tOrName === 'string') {
+        name = tOrName;
+        actualParent = nameOrParent;
+      } else {
+        name = nameOrParent;
+        actualParent = parent;
+      }
+      const handle = await actualParent.getFileHandle(name, { create: true });
       assert_equals(await getFileSize(handle), 0);
       return handle;
     }
 
-    async function createFileWithContents(name, contents, parent) {
-      const handle = await createEmptyFile(name, parent);
+    async function createFileWithContents(tOrName, nameOrContents, contentsOrParent, parent) {
+      let name, contents, actualParent;
+      if (typeof tOrName === 'string') {
+        name = tOrName;
+        contents = nameOrContents;
+        actualParent = contentsOrParent;
+      } else {
+        name = nameOrContents;
+        contents = contentsOrParent;
+        actualParent = parent;
+      }
+      const handle = await createEmptyFile(name, actualParent);
       const writer = await handle.createWritable();
       await writer.write(new Blob([contents]));
       await writer.close();
@@ -111,23 +137,74 @@
       });
     }
 
-    function createFileHandles(dir, ...fileNames) {
+    function createFileHandles(tOrDir, dirOrFirstName, ...rest) {
+      let dir, fileNames;
+      if (tOrDir && typeof tOrDir.getFileHandle === 'function') {
+        dir = tOrDir;
+        fileNames = [dirOrFirstName, ...rest];
+      } else if (tOrDir && typeof tOrDir.getDirectoryHandle === 'function') {
+        dir = tOrDir;
+        fileNames = [dirOrFirstName, ...rest];
+      } else {
+        dir = dirOrFirstName;
+        fileNames = rest;
+      }
       return Promise.all(
         fileNames.map(fileName => dir.getFileHandle(fileName, { create: true }))
       );
     }
 
-    function createDirectoryHandles(dir, ...dirNames) {
+    function createDirectoryHandles(tOrDir, dirOrFirstName, ...rest) {
+      let dir, dirNames;
+      if (tOrDir && typeof tOrDir.getDirectoryHandle === 'function') {
+        dir = tOrDir;
+        dirNames = [dirOrFirstName, ...rest];
+      } else {
+        dir = dirOrFirstName;
+        dirNames = rest;
+      }
       return Promise.all(
         dirNames.map(dirName => dir.getDirectoryHandle(dirName, { create: true }))
       );
     }
 
-    // Cleanup sandboxed filesystem
+    // Cleanup sandboxed filesystem - ignores errors to handle locked files gracefully
     async function cleanupSandboxedFileSystem(root) {
+      const entries = [];
       for await (const [name, entry] of root) {
-        await root.removeEntry(name, { recursive: entry.kind === 'directory' });
+        entries.push([name, entry]);
       }
+      await Promise.allSettled(
+        entries.map(([name, entry]) =>
+          root.removeEntry(name, { recursive: entry.kind === 'directory' })
+        )
+      );
+    }
+
+    // recordingReadableStream - creates a ReadableStream that records events
+    function recordingReadableStream(extras = {}, strategy) {
+      let controllerToCopyOver;
+      const stream = new ReadableStream({
+        type: extras.type,
+        start(controller) {
+          controllerToCopyOver = controller;
+          if (extras.start) {
+            return extras.start(controller);
+          }
+        },
+        pull(controller) {
+          if (extras.pull) {
+            return extras.pull(controller);
+          }
+        },
+        cancel(reason) {
+          if (extras.cancel) {
+            return extras.cancel(reason);
+          }
+        }
+      }, strategy);
+      stream.controller = controllerToCopyOver;
+      return stream;
     }
 
     // ──────────────────────────────────────────────────────
@@ -135,6 +212,18 @@
     // ──────────────────────────────────────────────────────
 
     const root = await getOriginPrivateDirectory(import('/src/adapters/memory.js'));
+
+    // Override navigator.storage.getDirectory to use the polyfill root
+    // so that promise_tests that call navigator.storage.getDirectory() use our polyfill
+    try {
+      Object.defineProperty(navigator.storage, 'getDirectory', {
+        value: async () => root,
+        writable: true,
+        configurable: true,
+      });
+    } catch (e) {
+      // Ignore if navigator.storage.getDirectory cannot be overridden
+    }
 
     function directory_test(func, description) {
       promise_test(async t => {
@@ -163,6 +252,7 @@
       createFileHandles,
       createDirectoryHandles,
       directory_test,
+      recordingReadableStream,
       garbageCollect: () => {},
     });
 

@@ -15,99 +15,112 @@ export class Sink {
     this.file = file
     this.size = file.size
     this.position = 0
+    this._hasLock = true
     this.fileHandle._openWritables++
+  }
+
+  _releaseLock () {
+    if (this._hasLock) {
+      this.fileHandle._openWritables--
+      this._hasLock = false
+    }
   }
 
   write (chunk) {
     if (this.fileHandle._deleted) throw new DOMException(...GONE)
     let file = this.file
 
-    if (typeof chunk === 'object' && chunk !== null && !(chunk instanceof Blob) && !ArrayBuffer.isView(chunk) && !(chunk instanceof ArrayBuffer)) {
-      if (chunk.type === 'write') {
-        if (Number.isInteger(chunk.position) && chunk.position >= 0) {
-          this.position = chunk.position
-          if (this.size < chunk.position) {
-            this.file = new File(
-              [this.file, new ArrayBuffer(chunk.position - this.size)],
-              this.file.name,
-              this.file
-            )
+    try {
+      if (typeof chunk === 'object' && chunk !== null && !(chunk instanceof Blob) && !ArrayBuffer.isView(chunk) && !(chunk instanceof ArrayBuffer)) {
+        if (chunk.type === 'write') {
+          if (Number.isInteger(chunk.position) && chunk.position >= 0) {
+            this.position = chunk.position
+            if (this.size < chunk.position) {
+              this.file = new File(
+                [this.file, new ArrayBuffer(chunk.position - this.size)],
+                this.file.name,
+                this.file
+              )
+            }
           }
-        }
-        if (!('data' in chunk)) {
-          throw new DOMException(...SYNTAX('write requires a data argument'))
-        }
-        chunk = chunk.data
-      } else if (chunk.type === 'seek') {
-        if (Number.isInteger(chunk.position) && chunk.position >= 0) {
-          if (this.size < chunk.position) {
-            throw new DOMException(...INVALID)
+          if (!('data' in chunk)) {
+            throw new DOMException(...SYNTAX('write requires a data argument'))
           }
-          this.position = chunk.position
-          return
-        } else {
-          throw new DOMException(...SYNTAX('seek requires a position argument'))
-        }
-      } else if (chunk.type === 'truncate') {
-        if (Number.isInteger(chunk.size) && chunk.size >= 0) {
-          file = chunk.size < this.size
-            ? new File([file.slice(0, chunk.size)], file.name, file)
-            : new File([file, new Uint8Array(chunk.size - this.size)], file.name)
+          chunk = chunk.data
+        } else if (chunk.type === 'seek') {
+          if (Number.isInteger(chunk.position) && chunk.position >= 0) {
+            if (this.size < chunk.position) {
+              throw new DOMException(...INVALID)
+            }
+            this.position = chunk.position
+            return
+          } else {
+            throw new DOMException(...SYNTAX('seek requires a position argument'))
+          }
+        } else if (chunk.type === 'truncate') {
+          if (Number.isInteger(chunk.size) && chunk.size >= 0) {
+            file = chunk.size < this.size
+              ? new File([file.slice(0, chunk.size)], file.name, file)
+              : new File([file, new Uint8Array(chunk.size - this.size)], file.name)
 
-          this.size = file.size
-          if (this.position > file.size) {
-            this.position = file.size
+            this.size = file.size
+            if (this.position > file.size) {
+              this.position = file.size
+            }
+            this.file = file
+            return
+          } else {
+            throw new DOMException(...SYNTAX('truncate requires a size argument'))
           }
-          this.file = file
-          return
         } else {
-          throw new DOMException(...SYNTAX('truncate requires a size argument'))
+          // If it's an object but not a Blob, BufferSource, or valid WriteParams, it's invalid.
+          throw new TypeError('Invalid data passed to write()')
         }
-      } else {
-        // If it's an object but not a Blob, BufferSource, or valid WriteParams, it's invalid.
+      }
+
+      if (chunk === null || (typeof chunk !== 'string' && !(chunk instanceof Blob) && !ArrayBuffer.isView(chunk) && !(chunk instanceof ArrayBuffer))) {
         throw new TypeError('Invalid data passed to write()')
       }
-    }
 
-    if (chunk === null || (typeof chunk !== 'string' && !(chunk instanceof Blob) && !ArrayBuffer.isView(chunk) && !(chunk instanceof ArrayBuffer))) {
-      throw new TypeError('Invalid data passed to write()')
-    }
+      if (chunk instanceof Blob && chunk._handle?._deleted) {
+        throw new DOMException(...GONE)
+      }
 
-    if (chunk instanceof Blob && chunk._handle?._deleted) {
-      throw new DOMException(...GONE)
-    }
+      chunk = new Blob([chunk])
 
-    chunk = new Blob([chunk])
+      let blob = this.file
+      // Calc the head and tail fragments
+      const head = blob.slice(0, this.position)
+      const tail = blob.slice(this.position + chunk.size)
 
-    let blob = this.file
-    // Calc the head and tail fragments
-    const head = blob.slice(0, this.position)
-    const tail = blob.slice(this.position + chunk.size)
+      // Calc the padding
+      let padding = this.position - head.size
+      if (padding < 0) {
+        padding = 0
+      }
+      try {
+        blob = new File([
+          head,
+          new Uint8Array(padding),
+          chunk,
+          tail
+        ], blob.name)
+      } catch (err) {
+        throw new DOMException(...GONE)
+      }
 
-    // Calc the padding
-    let padding = this.position - head.size
-    if (padding < 0) {
-      padding = 0
-    }
-    try {
-      blob = new File([
-        head,
-        new Uint8Array(padding),
-        chunk,
-        tail
-      ], blob.name)
+      this.size = blob.size
+      this.position += chunk.size
+
+      this.file = blob
     } catch (err) {
-      throw new DOMException(...GONE)
+      this._releaseLock()
+      throw err
     }
-
-    this.size = blob.size
-    this.position += chunk.size
-
-    this.file = blob
   }
   abort () {
     if (this.fileHandle._deleted) throw new DOMException(...GONE)
-    this.fileHandle._openWritables--
+    this._releaseLock()
     this.file =
     this.position =
     this.size = null
@@ -115,7 +128,7 @@ export class Sink {
   close () {
     if (this.fileHandle._deleted) throw new DOMException(...GONE)
     this.fileHandle._file = this.file
-    this.fileHandle._openWritables--
+    this._releaseLock()
     this.file =
     this.position =
     this.size = null
