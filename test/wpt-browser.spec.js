@@ -7,10 +7,26 @@ import expectedFailures from './wpt-expected-failures.json' with { type: 'json' 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
 
+// Skipped scripts and their reasons
+const SKIP_REASONS = {
+  'FileSystemObserver.js': 'FileSystemObserver not implemented',
+  'FileSystemObserver-writable-file-stream.js': 'FileSystemObserver not implemented',
+  'FileSystemBaseHandle-getUniqueId.js': 'Unique IDs not implemented',
+  'FileSystemFileHandle-create-sync-access-handle.js': 'SyncAccessHandle is OPFS-only',
+  'FileSystemSyncAccessHandle-flush.js': 'SyncAccessHandle is OPFS-only',
+  'FileSystemBaseHandle-buckets.js': 'Storage buckets API not applicable',
+  'FileSystemBaseHandle-IndexedDB.js': 'Browser-only (postMessage + IDB)',
+  'FileSystemBaseHandle-postMessage-BroadcastChannel.js': 'Browser-only (postMessage)',
+  'FileSystemBaseHandle-postMessage-Error.js': 'Browser-only (postMessage)',
+  'FileSystemBaseHandle-postMessage-frames.js': 'Browser-only (postMessage)',
+  'FileSystemBaseHandle-postMessage-MessagePort-frames.js': 'Browser-only (postMessage)',
+  'FileSystemBaseHandle-postMessage-MessagePort-windows.js': 'Browser-only (postMessage)',
+  'FileSystemBaseHandle-postMessage-MessagePort-workers.js': 'Browser-only (postMessage)',
+  'FileSystemBaseHandle-postMessage-windows.js': 'Browser-only (postMessage)',
+  'FileSystemBaseHandle-postMessage-workers.js': 'Browser-only (postMessage)',
+}
+
 // WPT test scripts that are compatible with the polyfill's memory adapter.
-// We skip tests that require browser-specific APIs (postMessage, IndexedDB,
-// SyncAccessHandle, BroadcastChannel, etc.) or features not supported by
-// the polyfill (move, rename, remove, observers, buckets, unique IDs).
 const SUPPORTED_SCRIPTS = [
   'FileSystemDirectoryHandle-getDirectoryHandle.js',
   'FileSystemDirectoryHandle-getFileHandle.js',
@@ -22,6 +38,8 @@ const SUPPORTED_SCRIPTS = [
   'FileSystemWritableFileStream-write.js',
   'FileSystemWritableFileStream-piped.js',
   'FileSystemBaseHandle-isSameEntry.js',
+  'FileSystemBaseHandle-remove.js',
+  'FileSystemFileHandle-move.js',
 ]
 
 // Verify that WPT has been fetched
@@ -37,8 +55,30 @@ function getAvailableScripts () {
 
 const scripts = getAvailableScripts()
 
+// Get all available WPT scripts to determine coverage
+function getAllAvailableScripts () {
+  if (!wptAvailable) return []
+  return readdirSync(wptDir)
+}
+
+function getSkippedScripts () {
+  if (!wptAvailable) return []
+  const files = readdirSync(wptDir)
+  return Object.keys(SKIP_REASONS).filter(s => files.includes(s))
+}
+
+const skippedScripts = getSkippedScripts()
+
 test.describe('WPT File System Tests', () => {
   test.skip(!wptAvailable, 'WPT tests not fetched. Run: bash scripts/fetch-wpt.sh')
+
+  // Create skipped test blocks for scripts that are not implemented
+  // These will appear in Playwright HTML report as skipped with reason
+  for (const scriptName of skippedScripts) {
+    test.describe.skip(scriptName, () => {
+      test('skipped', async ({}) => {}, { reason: SKIP_REASONS[scriptName] })
+    })
+  }
 
   for (const scriptName of scripts) {
     test(scriptName, async ({ page }) => {

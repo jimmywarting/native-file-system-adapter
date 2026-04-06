@@ -21,6 +21,7 @@ else
     file-system-access/resources \
     fs/script-tests \
     fs/resources \
+    streams/resources \
     resources
   cd ..
 fi

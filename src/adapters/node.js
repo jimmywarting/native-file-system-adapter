@@ -9,7 +9,25 @@ const {
   DOMException
 } = config
 
-const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX } = errors
+const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX, NO_MOD } = errors
+
+const openWritables = new Map()
+
+export function clearLocks () {
+  openWritables.clear()
+}
+
+/**
+ * @param {string} path
+ */
+function isLocked (path) {
+  for (const [lockedPath, count] of openWritables) {
+    if (count > 0 && (lockedPath === path || lockedPath.startsWith(path + '/'))) {
+      return true
+    }
+  }
+  return false
+}
 
 /**
  * @see https://github.com/node-fetch/fetch-blob/blob/0455796ede330ecffd9eb6b9fdf206cc15f90f3e/index.js#L232
@@ -34,12 +52,17 @@ export class Sink {
    * @param {fs.FileHandle} fileHandle
    * @param {number} size
    * @param {string} dirPath
+   * @param {string} path
+   * @param {string} tempPath
    */
-  constructor (fileHandle, size, dirPath) {
+  constructor (fileHandle, size, dirPath, path, tempPath) {
     this._fileHandle = fileHandle
     this._size = size
     this._position = 0
     this._dirPath = dirPath
+    this._path = path
+    this._tempPath = tempPath
+    openWritables.set(path, (openWritables.get(path) || 0) + 1)
   }
 
   async _checkDir () {
@@ -51,11 +74,13 @@ export class Sink {
 
   async abort() {
     await this._fileHandle.close()
+    await fs.unlink(this._tempPath).catch(() => {})
+    openWritables.set(this._path, openWritables.get(this._path) - 1)
   }
 
   async write (chunk) {
     await this._checkDir()
-    if (typeof chunk === 'object') {
+    if (typeof chunk === 'object' && chunk !== null && !isBlob(chunk) && !ArrayBuffer.isView(chunk) && !(chunk instanceof ArrayBuffer)) {
       if (chunk.type === 'write') {
         if (Number.isInteger(chunk.position) && chunk.position >= 0) {
           this._position = chunk.position
@@ -93,7 +118,13 @@ export class Sink {
           await this._fileHandle.close()
           throw new DOMException(...SYNTAX('truncate requires a size argument'))
         }
+      } else {
+        throw new TypeError('Invalid data passed to write()')
       }
+    }
+
+    if (chunk === null || (typeof chunk !== 'string' && !isBlob(chunk) && !ArrayBuffer.isView(chunk) && !(chunk instanceof ArrayBuffer))) {
+      throw new TypeError('Invalid data passed to write()')
     }
 
     if (chunk instanceof ArrayBuffer) {
@@ -101,21 +132,20 @@ export class Sink {
     } else if (typeof chunk === 'string') {
       chunk = Buffer.from(chunk)
     } else if (isBlob(chunk)) {
-      for await (const data of chunk.stream()) {
-        try {
-          const res = await this._fileHandle.writev([data], this._position)
+      try {
+        for await (const data of chunk.stream()) {
+          const res = await this._fileHandle.write(data, 0, data.length, this._position)
           this._position += res.bytesWritten
           this._size = Math.max(this._size, this._position)
-        } catch (err) {
-          if (err.code === 'ENOENT') throw new DOMException(...GONE)
-          throw err
         }
+      } catch (err) {
+        throw new DOMException(...GONE)
       }
       return
     }
 
     try {
-      const res = await this._fileHandle.writev([chunk], this._position)
+      const res = await this._fileHandle.write(chunk, 0, chunk.length, this._position)
       this._position += res.bytesWritten
       this._size = Math.max(this._size, this._position)
     } catch (err) {
@@ -127,6 +157,8 @@ export class Sink {
   async close () {
     // First make sure we close the handle
     await this._fileHandle.close()
+    await fs.rename(this._tempPath, this._path)
+    openWritables.set(this._path, openWritables.get(this._path) - 1)
   }
 }
 
@@ -147,7 +179,9 @@ export class FileHandle {
       if (err.code === 'ENOENT') throw new DOMException(...GONE)
     })
 
-    return openAsBlob(this._path)
+    const blob = await openAsBlob(this._path)
+    const { mtimeMs } = await fs.stat(this._path)
+    return new File([blob], this.name, { lastModified: mtimeMs })
   }
 
   async isSameEntry (other) {
@@ -160,15 +194,52 @@ export class FileHandle {
 
   /** @param {{ keepExistingData: boolean; }} opts */
   async createWritable (opts) {
-    const fileHandle = await fs.open(this._path, opts.keepExistingData ? 'r+' : 'w+').catch(err => {
+    const tempPath = this._path + '.' + Math.random().toString(36).slice(2) + '.tmp'
+    if (opts.keepExistingData) {
+      await fs.copyFile(this._path, tempPath).catch(err => {
+        if (err.code === 'ENOENT') throw new DOMException(...GONE)
+        throw err
+      })
+    }
+    const fileHandle = await fs.open(tempPath, opts.keepExistingData ? 'r+' : 'w+').catch(err => {
       if (err.code === 'ENOENT') throw new DOMException(...GONE)
       throw err
     })
     const { size } = await fileHandle.stat()
-    return new Sink(fileHandle, size, dirname(this._path))
+    return new Sink(fileHandle, size, dirname(this._path), this._path, tempPath)
+  }
+
+  async move (dest, newName) {
+    if (newName === '') throw new TypeError('Name cannot be empty.')
+    if (isLocked(this._path)) throw new DOMException(...NO_MOD)
+    const name = newName || this.name
+    const destPath = dest ? dest._path : dirname(this._path)
+    const newPath = join(destPath, name)
+
+    if (newPath === this._path) return
+
+    if (newName && (newName.includes('/') || newName.includes('\\') || newName === '.' || newName === '..')) {
+      throw new TypeError('Name contains invalid characters.')
+    }
+
+    const stat = await fs.lstat(newPath).catch(() => null)
+    if (stat && stat.isDirectory()) {
+      throw new DOMException(...MOD_ERR)
+    }
+
+    if (isLocked(newPath)) throw new DOMException(...NO_MOD)
+
+    await fs.rename(this._path, newPath).catch(err => {
+      if (err.code === 'ENOENT') throw new DOMException(...GONE)
+      throw err
+    })
+
+    this._path = newPath
+    this.name = name
   }
 
   async remove () {
+    if (isLocked(this._path)) throw new DOMException(...NO_MOD)
     await fs.unlink(this._path).catch(err => {
       if (err.code === 'ENOENT') throw new DOMException(...GONE)
       throw err
@@ -179,10 +250,11 @@ export class FileHandle {
 export class FolderHandle {
   _path = ''
 
-  constructor (path = '', name = '') {
+  constructor (path = '', name = '', isRoot = false) {
     this.name = name
     this.kind = 'directory'
     this._path = path
+    this._isRoot = isRoot
   }
 
   /** @param {FolderHandle} other */
@@ -252,6 +324,7 @@ export class FolderHandle {
    */
   async removeEntry (name, opts) {
     const path = join(this._path, name)
+    if (isLocked(path)) throw new DOMException(...NO_MOD)
     const stat = await fs.lstat(path).catch(err => {
       if (err.code === 'ENOENT') throw new DOMException(...GONE)
       throw err
@@ -274,7 +347,15 @@ export class FolderHandle {
   }
 
   async remove (options = {}) {
+    if (this._isRoot) {
+      const entries = await fs.readdir(this._path)
+      for (const name of entries) {
+        await this.removeEntry(name, { recursive: true })
+      }
+      return
+    }
     const path = this._path
+    if (isLocked(path)) throw new DOMException(...NO_MOD)
     const stat = await fs.lstat(path).catch(err => {
       if (err.code === 'ENOENT') throw new DOMException(...GONE)
       throw err
@@ -302,4 +383,4 @@ export class FolderHandle {
   }
 }
 
-export default path => new FolderHandle(path)
+export default path => new FolderHandle(path, '', true)

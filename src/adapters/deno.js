@@ -1,7 +1,7 @@
-import { join, basename } from 'jsr:@std/path'
+import { join, basename, dirname } from 'jsr:@std/path'
 import { errors } from '../util.js'
 
-const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX } = errors
+const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX, NO_MOD } = errors
 
 /** @param {string} path */
 function fileFrom (path) {
@@ -121,6 +121,32 @@ export class FileHandle {
 
     const { size } = await fileHandle.stat()
     return new Sink(fileHandle, size)
+  }
+
+  async move (dest, newName) {
+    if (newName === '') throw new TypeError('Name cannot be empty.')
+    const name = newName || this.name
+    const destPath = dest ? dest.#getPath.call(dest) : dirname(this.#path)
+    const newPath = join(destPath, name)
+
+    if (newPath === this.#path) return
+
+    if (newName && (newName.includes('/') || newPath.includes('\\') || newName === '.' || newName === '..')) {
+      throw new TypeError('Name contains invalid characters.')
+    }
+
+    const stat = await Deno.lstat(newPath).catch(() => null)
+    if (stat && stat.isDirectory) {
+      throw new DOMException(...MOD_ERR)
+    }
+
+    await Deno.rename(this.#path, newPath).catch(err => {
+      if (err.name === 'NotFound') throw new DOMException(...GONE)
+      throw err
+    })
+
+    this.#path = newPath
+    this.name = name
   }
 
   async remove () {

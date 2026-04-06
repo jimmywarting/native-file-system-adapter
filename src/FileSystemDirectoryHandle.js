@@ -24,7 +24,7 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
     if (name === '') {
       throw new TypeError(`Name can't be an empty string.`)
     }
-    if (name === '.' || name === '..' || name.includes('/')) {
+    if (name === '.' || name === '..' || name.includes('/') || name.includes('\\')) {
       throw new TypeError(`Name contains invalid characters.`)
     }
     options.create = !!options.create
@@ -60,7 +60,7 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
   async getFileHandle (name, options = {}) {
     const {FileSystemFileHandle} = await import('./FileSystemFileHandle.js')
     if (name === '') throw new TypeError(`Name can't be an empty string.`)
-    if (name === '.' || name === '..' || name.includes('/')) {
+    if (name === '.' || name === '..' || name.includes('/') || name.includes('\\')) {
       throw new TypeError(`Name contains invalid characters.`)
     }
     options.create = !!options.create
@@ -77,7 +77,7 @@ class FileSystemDirectoryHandle extends FileSystemHandle {
     if (name === '') {
       throw new TypeError(`Name can't be an empty string.`)
     }
-    if (name === '.' || name === '..' || name.includes('/')) {
+    if (name === '.' || name === '..' || name.includes('/') || name.includes('\\')) {
       throw new TypeError(`Name contains invalid characters.`)
     }
     options.recursive = !!options.recursive // cuz node's fs.rm require boolean

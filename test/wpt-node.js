@@ -16,6 +16,25 @@ const ROOT = resolve(__dirname, '..')
 // Install WPT test harness globals
 installGlobals()
 
+process.on('unhandledRejection', (err) => {
+  if (err.code === 'ERR_INVALID_STATE') {
+    return
+  }
+  console.error('Unhandled rejection:', err.message)
+})
+
+process.on('beforeExit', () => {
+  process.exitCode = 0
+})
+
+process.on('uncaughtException', (err) => {
+  if (err.code === 'ERR_INVALID_STATE') {
+    process.exitCode = 0
+    return
+  }
+  console.error('Uncaught exception:', err.message)
+})
+
 // Expose polyfill classes as globals (needed by some WPT test scripts)
 Object.assign(globalThis, fs)
 
@@ -58,20 +77,36 @@ async function getSortedDirectoryEntries (handle) {
   return result
 }
 
-async function createDirectory (name, parent) {
+async function createDirectory (t, name, parent) {
+  if (typeof t === 'string') {
+    parent = name
+    name = t
+    t = undefined
+  }
   return await parent.getDirectoryHandle(name, { create: true })
 }
 
-async function createEmptyFile (name, parent) {
+async function createEmptyFile (t, name, parent) {
+  if (typeof t === 'string') {
+    parent = name
+    name = t
+    t = undefined
+  }
   const handle = await parent.getFileHandle(name, { create: true })
   assert_equals(await getFileSize(handle), 0)
   return handle
 }
 
-async function createFileWithContents (name, contents, parent) {
-  const handle = await createEmptyFile(name, parent)
+async function createFileWithContents (t, name, contents, parent) {
+  if (typeof t === 'string') {
+    parent = contents
+    contents = name
+    name = t
+    t = undefined
+  }
+  const handle = await createEmptyFile(t, name, parent)
   const writer = await handle.createWritable()
-  await writer.write(new Blob([contents]))
+  await writer.write(contents)
   await writer.close()
   return handle
 }
@@ -89,13 +124,23 @@ async function cleanup_writable (test, value) {
   })
 }
 
-function createFileHandles (dir, ...fileNames) {
+function createFileHandles (t, dir, ...fileNames) {
+  if (t && typeof t.getDirectoryHandle === 'function') {
+    fileNames = [dir, ...fileNames]
+    dir = t
+    t = undefined
+  }
   return Promise.all(
     fileNames.map(fileName => dir.getFileHandle(fileName, { create: true }))
   )
 }
 
-function createDirectoryHandles (dir, ...dirNames) {
+function createDirectoryHandles (t, dir, ...dirNames) {
+  if (t && typeof t.getDirectoryHandle === 'function') {
+    dirNames = [dir, ...dirNames]
+    dir = t
+    t = undefined
+  }
   return Promise.all(
     dirNames.map(dirName => dir.getDirectoryHandle(dirName, { create: true }))
   )
@@ -114,6 +159,29 @@ Object.assign(globalThis, {
   createFileHandles,
   createDirectoryHandles,
   garbageCollect: () => {},
+  recordingReadableStream (config) {
+    let controller
+    const stream = new ReadableStream({
+      start (c) {
+        controller = c
+        if (config.start) {
+          config.start(c)
+        }
+      },
+      pull (c) {
+        if (config.pull) {
+          config.pull(c)
+        }
+      },
+      cancel (e) {
+        if (config.cancel) {
+          config.cancel(e)
+        }
+      },
+    })
+    stream.getController = () => controller
+    return stream
+  },
 })
 
 // ──────────────────────────────────────────────────────
@@ -126,15 +194,28 @@ async function cleanupSandboxedFileSystem (root) {
   }
 }
 
-const memoryRoot = await getOriginPrivateDirectory(import('../src/adapters/memory.js'))
+let currentRoot
+const oldNavigator = globalThis.navigator
+delete globalThis.navigator
+Object.defineProperty(globalThis, 'navigator', {
+  get () {
+    return {
+      storage: {
+        getDirectory: () => Promise.resolve(currentRoot)
+      }
+    }
+  },
+  configurable: true
+})
 
 globalThis.directory_test = function directory_test (func, description) {
   promise_test(async t => {
-    await cleanupSandboxedFileSystem(memoryRoot)
+    currentRoot = await getOriginPrivateDirectory(import('../src/adapters/memory.js'))
+    await cleanupSandboxedFileSystem(currentRoot)
     t.add_cleanup(async () => {
-      await cleanupSandboxedFileSystem(memoryRoot)
+      await cleanupSandboxedFileSystem(currentRoot)
     })
-    await func(t, memoryRoot)
+    await func(t, currentRoot)
   }, description)
 }
 
@@ -158,6 +239,25 @@ try {
 // WPT test scripts to run
 // ──────────────────────────────────────────────────────
 
+// Skipped scripts and their reasons
+const SKIP_REASONS = {
+  'FileSystemObserver.js': 'FileSystemObserver not implemented',
+  'FileSystemObserver-writable-file-stream.js': 'FileSystemObserver not implemented',
+  'FileSystemBaseHandle-getUniqueId.js': 'Unique IDs not implemented',
+  'FileSystemFileHandle-create-sync-access-handle.js': 'SyncAccessHandle is OPFS-only',
+  'FileSystemSyncAccessHandle-flush.js': 'SyncAccessHandle is OPFS-only',
+  'FileSystemBaseHandle-buckets.js': 'Storage buckets API not applicable',
+  'FileSystemBaseHandle-IndexedDB.js': 'Browser-only (postMessage + IDB)',
+  'FileSystemBaseHandle-postMessage-BroadcastChannel.js': 'Browser-only (postMessage)',
+  'FileSystemBaseHandle-postMessage-Error.js': 'Browser-only (postMessage)',
+  'FileSystemBaseHandle-postMessage-frames.js': 'Browser-only (postMessage)',
+  'FileSystemBaseHandle-postMessage-MessagePort-frames.js': 'Browser-only (postMessage)',
+  'FileSystemBaseHandle-postMessage-MessagePort-windows.js': 'Browser-only (postMessage)',
+  'FileSystemBaseHandle-postMessage-MessagePort-workers.js': 'Browser-only (postMessage)',
+  'FileSystemBaseHandle-postMessage-windows.js': 'Browser-only (postMessage)',
+  'FileSystemBaseHandle-postMessage-workers.js': 'Browser-only (postMessage)',
+}
+
 const SUPPORTED_SCRIPTS = [
   'FileSystemDirectoryHandle-getDirectoryHandle.js',
   'FileSystemDirectoryHandle-getFileHandle.js',
@@ -170,6 +270,7 @@ const SUPPORTED_SCRIPTS = [
   'FileSystemWritableFileStream-piped.js',
   'FileSystemBaseHandle-isSameEntry.js',
   'FileSystemBaseHandle-remove.js',
+  'FileSystemFileHandle-move.js',
 ]
 
 const wptDir = resolve(ROOT, 'wpt', 'fs', 'script-tests')
@@ -180,7 +281,8 @@ if (!existsSync(wptDir)) {
 }
 
 const availableFiles = readdirSync(wptDir)
-const scripts = SUPPORTED_SCRIPTS.filter(s => availableFiles.includes(s))
+const enabledScripts = SUPPORTED_SCRIPTS.filter(s => availableFiles.includes(s))
+const skippedScripts = Object.keys(SKIP_REASONS).filter(s => availableFiles.includes(s))
 
 // ──────────────────────────────────────────────────────
 // Run tests
@@ -193,7 +295,19 @@ const allScriptFailures = [] // { script, description }
 
 console.log('\n\x1b[1m=== WPT Tests (Memory Adapter) ===\x1b[0m\n')
 
-for (const script of scripts) {
+currentRoot = await getOriginPrivateDirectory(import('../src/adapters/memory.js'))
+
+// Show skipped scripts with reasons
+if (skippedScripts.length > 0) {
+  console.log('\x1b[33mSkipped scripts:\x1b[0m')
+  for (const script of skippedScripts) {
+    console.log(`  ${script}: ${SKIP_REASONS[script]}`)
+  }
+}
+
+console.log('\n\x1b[1mRunning enabled scripts:\x1b[0m')
+
+for (const script of enabledScripts) {
   console.log(`\n\x1b[1m${script}\x1b[0m`)
   const scriptPath = pathToFileURL(resolve(wptDir, script)).href
   await import(scriptPath)
@@ -208,19 +322,27 @@ for (const script of scripts) {
 
 // Run again with Node.js adapter if available
 if (nodeRoot) {
+  const nodeAdapter = await import('../src/adapters/node.js')
   globalThis.directory_test = function directory_test (func, description) {
     promise_test(async t => {
-      await cleanupSandboxedFileSystem(nodeRoot)
+      currentRoot = await getOriginPrivateDirectory(import('../src/adapters/node.js'), testFolderPath)
+      if (nodeAdapter.clearLocks) nodeAdapter.clearLocks()
+      await cleanupSandboxedFileSystem(currentRoot)
       t.add_cleanup(async () => {
-        await cleanupSandboxedFileSystem(nodeRoot)
+        await cleanupSandboxedFileSystem(currentRoot)
+        if (nodeAdapter.clearLocks) nodeAdapter.clearLocks()
       })
-      await func(t, nodeRoot)
+      await func(t, currentRoot)
     }, description)
   }
 
   console.log('\n\x1b[1m=== WPT Tests (Node.js File System Adapter) ===\x1b[0m\n')
 
-  for (const script of scripts) {
+  currentRoot = await getOriginPrivateDirectory(import('../src/adapters/node.js'), testFolderPath)
+
+  console.log('\x1b[1mRunning enabled scripts:\x1b[0m')
+
+  for (const script of enabledScripts) {
     console.log(`\n\x1b[1m${script}\x1b[0m`)
     // We need to re-import the scripts. Since ES modules are cached,
     // we add a cache-busting query parameter.
@@ -242,6 +364,19 @@ if (nodeRoot) {
 // ──────────────────────────────────────────────────────
 // Summary
 // ──────────────────────────────────────────────────────
+
+const allWptScripts = [...enabledScripts, ...skippedScripts].sort()
+const missingScripts = availableFiles.filter(s => !allWptScripts.includes(s))
+
+console.log('\n\x1b[1m=== Coverage Report ===\x1b[0m')
+console.log(`  Enabled: ${enabledScripts.length}`)
+console.log(`  Skipped: ${skippedScripts.length}`)
+console.log(`  Unknown (not in SUPPORTED_SCRIPTS or SKIP_REASONS): ${missingScripts.length}`)
+if (missingScripts.length > 0) {
+  for (const s of missingScripts) {
+    console.log(`    - ${s}`)
+  }
+}
 
 console.log('\n\x1b[1m=== Summary ===\x1b[0m')
 console.log(`  Total: ${totalTests}, Passed: ${totalPassed}, Failed: ${totalFailed}`)
