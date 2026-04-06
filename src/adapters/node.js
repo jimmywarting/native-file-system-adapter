@@ -9,7 +9,7 @@ const {
   DOMException
 } = config
 
-const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX, NO_MOD } = errors
+const { GONE, MISMATCH, MOD_ERR, NO_MOD } = errors
 
 const openWritables = new Map()
 
@@ -29,24 +29,6 @@ function isLocked (path) {
   return false
 }
 
-/**
- * @see https://github.com/node-fetch/fetch-blob/blob/0455796ede330ecffd9eb6b9fdf206cc15f90f3e/index.js#L232
- * @param {*} object
- * @returns {object is Blob}
- */
-function isBlob (object) {
-  return (
-    object &&
-    typeof object === 'object' &&
-    typeof object.constructor === 'function' &&
-    (
-      typeof object.stream === 'function' ||
-      typeof object.arrayBuffer === 'function'
-    ) &&
-    /^(Blob|File)$/.test(object[Symbol.toStringTag])
-  )
-}
-
 export class Sink {
   /**
    * @param {fs.FileHandle} fileHandle
@@ -57,8 +39,8 @@ export class Sink {
    */
   constructor (fileHandle, size, dirPath, path, tempPath) {
     this._fileHandle = fileHandle
-    this._size = size
-    this._position = 0
+    /** Exposed so FileSystemWritableFileStream can read the initial file size. */
+    this.size = size
     this._dirPath = dirPath
     this._path = path
     this._tempPath = tempPath
@@ -78,76 +60,40 @@ export class Sink {
     openWritables.set(this._path, openWritables.get(this._path) - 1)
   }
 
-  async write (chunk) {
+  /**
+   * Write a Blob at the given byte offset.
+   * Called by the outer FileSystemWritableFileStream after WriteParams parsing.
+   *
+   * @param {Blob} blob
+   * @param {number} position
+   */
+  async write (blob, position) {
     await this._checkDir()
-    if (typeof chunk === 'object' && chunk !== null && !isBlob(chunk) && !ArrayBuffer.isView(chunk) && !(chunk instanceof ArrayBuffer)) {
-      if (chunk.type === 'write') {
-        if (Number.isInteger(chunk.position) && chunk.position >= 0) {
-          this._position = chunk.position
-        }
-        if (!('data' in chunk)) {
-          await this._fileHandle.close()
-          throw new DOMException(...SYNTAX('write requires a data argument'))
-        }
-        chunk = chunk.data
-      } else if (chunk.type === 'seek') {
-        if (Number.isInteger(chunk.position) && chunk.position >= 0) {
-          if (this._size < chunk.position) {
-            throw new DOMException(...INVALID)
-          }
-          this._position = chunk.position
-          return
-        } else {
-          await this._fileHandle.close()
-          throw new DOMException(...SYNTAX('seek requires a position argument'))
-        }
-      } else if (chunk.type === 'truncate') {
-        if (Number.isInteger(chunk.size) && chunk.size >= 0) {
-          try {
-            await this._fileHandle.truncate(chunk.size)
-            this._size = chunk.size
-            if (this._position > this._size) {
-              this._position = this._size
-            }
-            return
-          } catch (err) {
-            if (err.code === 'ENOENT') throw new DOMException(...GONE)
-            throw err
-          }
-        } else {
-          await this._fileHandle.close()
-          throw new DOMException(...SYNTAX('truncate requires a size argument'))
-        }
-      } else {
-        throw new TypeError('Invalid data passed to write()')
-      }
-    }
-
-    if (chunk === null || (typeof chunk !== 'string' && !isBlob(chunk) && !ArrayBuffer.isView(chunk) && !(chunk instanceof ArrayBuffer))) {
-      throw new TypeError('Invalid data passed to write()')
-    }
-
-    if (chunk instanceof ArrayBuffer) {
-      chunk = new Uint8Array(chunk)
-    } else if (typeof chunk === 'string') {
-      chunk = Buffer.from(chunk)
-    } else if (isBlob(chunk)) {
-      try {
-        for await (const data of chunk.stream()) {
-          const res = await this._fileHandle.write(data, 0, data.length, this._position)
-          this._position += res.bytesWritten
-          this._size = Math.max(this._size, this._position)
-        }
-      } catch (err) {
-        throw new DOMException(...GONE)
-      }
-      return
-    }
-
+    let pos = position
     try {
-      const res = await this._fileHandle.write(chunk, 0, chunk.length, this._position)
-      this._position += res.bytesWritten
-      this._size = Math.max(this._size, this._position)
+      for await (const data of blob.stream()) {
+        const res = await this._fileHandle.write(data, 0, data.length, pos)
+        pos += res.bytesWritten
+      }
+      this.size = Math.max(this.size, pos)
+    } catch (err) {
+      if (err.code === 'ENOENT') throw new DOMException(...GONE)
+      // A blob that can no longer be read (e.g. the source handle was deleted)
+      // should surface as NotFoundError, matching the behaviour of other adapters.
+      if (err.name === 'NotReadableError') throw new DOMException(...GONE)
+      throw err
+    }
+  }
+
+  /**
+   * Truncate (or zero-extend) the file to exactly `size` bytes.
+   *
+   * @param {number} size
+   */
+  async truncate (size) {
+    try {
+      await this._fileHandle.truncate(size)
+      this.size = size
     } catch (err) {
       if (err.code === 'ENOENT') throw new DOMException(...GONE)
       throw err

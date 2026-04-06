@@ -1,13 +1,59 @@
 import { errors } from '../util.js'
 
-const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX, SECURITY, DISALLOWED } = errors
+const { GONE, MISMATCH, MOD_ERR, DISALLOWED } = errors
 
+/**
+ * An adapter Sink must implement this minimal interface.
+ * All WriteParams parsing ({ type: 'write'|'seek'|'truncate', … }),
+ * write-position tracking, and seek/truncate validation are handled by
+ * the outer FileSystemWritableFileStream – adapters never see raw WriteParams.
+ *
+ * Required properties / methods:
+ *   size                      – initial file size (number), read once at stream creation
+ *   write(blob, position)     – write a Blob at the given byte offset
+ *   truncate(size)            – shrink or zero-extend the file to `size` bytes
+ *   close()                   – commit changes
+ *   abort()                   – discard changes
+ */
 export class Sink {
   constructor () {
+    /** Expose the initial file size so FileSystemWritableFileStream can read it. */
+    this.size = 0
   }
-  write (chunk) {
+
+  /**
+   * Write a Blob at the given byte offset.
+   * The outer layer guarantees that `position <= current file size`
+   * (padding is applied via truncate() before write() if needed).
+   *
+   * @param {Blob} blob
+   * @param {number} position
+   * @returns {void | Promise<void>}
+   */
+  write (blob, position) {
   }
+
+  /**
+   * Truncate (or zero-extend) the file to exactly `size` bytes.
+   *
+   * @param {number} size
+   * @returns {void | Promise<void>}
+   */
+  truncate (size) {
+  }
+
+  /**
+   * Commit any pending writes.
+   * @returns {void | Promise<void>}
+   */
   close () {
+  }
+
+  /**
+   * Discard any pending writes.
+   * @returns {void | Promise<void>}
+   */
+  abort () {
   }
 }
 
@@ -24,7 +70,13 @@ export class FileHandle {
     return new File([], '')
   }
 
-  async createWritable () {
+  /**
+   * @public - Publicly available to the wrapper
+   * @param {{ keepExistingData: boolean }} opts
+   * @returns {Promise<Sink>}  A Sink with: size (number), write(blob, position), truncate(size), close(), abort()
+   */
+  async createWritable (opts) {
+    return new Sink()
   }
 
   /**

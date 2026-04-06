@@ -1,7 +1,7 @@
 import { join, basename, dirname } from 'jsr:@std/path'
 import { errors } from '../util.js'
 
-const { INVALID, GONE, MISMATCH, MOD_ERR, SYNTAX, NO_MOD } = errors
+const { GONE, MISMATCH, MOD_ERR, NO_MOD } = errors
 
 /** @param {string} path */
 function fileFrom (path) {
@@ -17,66 +17,37 @@ export class Sink {
    */
   constructor (fileHandle, size) {
     this.fileHandle = fileHandle
+    /** Exposed so FileSystemWritableFileStream can read the initial file size. */
     this.size = size
-    this.position = 0
   }
-  async abort() {
+
+  async abort () {
     await this.fileHandle.close()
   }
-  async write (chunk) {
-    if (typeof chunk === 'object') {
-      if (chunk.type === 'write') {
-        if (Number.isInteger(chunk.position) && chunk.position >= 0) {
-          this.position = chunk.position
-        }
-        if (!('data' in chunk)) {
-          await this.fileHandle.close()
-          throw new DOMException(...SYNTAX('write requires a data argument'))
-        }
-        chunk = chunk.data
-      } else if (chunk.type === 'seek') {
-        if (Number.isInteger(chunk.position) && chunk.position >= 0) {
-          if (this.size < chunk.position) {
-            throw new DOMException(...INVALID)
-          }
-          this.position = chunk.position
-          return
-        } else {
-          await this.fileHandle.close()
-          throw new DOMException(...SYNTAX('seek requires a position argument'))
-        }
-      } else if (chunk.type === 'truncate') {
-        if (Number.isInteger(chunk.size) && chunk.size >= 0) {
-          await this.fileHandle.truncate(chunk.size)
-          this.size = chunk.size
-          if (this.position > this.size) {
-            this.position = this.size
-          }
-          return
-        } else {
-          await this.fileHandle.close()
-          throw new DOMException(...SYNTAX('truncate requires a size argument'))
-        }
-      }
-    }
 
-    if (chunk instanceof ArrayBuffer) {
-      chunk = new Uint8Array(chunk)
-    } else if (typeof chunk === 'string') {
-      chunk = new TextEncoder().encode(chunk)
-    } else if (chunk instanceof Blob) {
-      await this.fileHandle.seek(this.position, Deno.SeekMode.Start)
-      for await (const data of chunk.stream()) {
-        const written = await this.fileHandle.write(data)
-        this.position += written
-        this.size = Math.max(this.size, this.position)
-      }
-      return
+  /**
+   * Write a Blob at the given byte offset.
+   * Called by the outer FileSystemWritableFileStream after WriteParams parsing.
+   *
+   * @param {Blob} blob
+   * @param {number} position
+   */
+  async write (blob, position) {
+    await this.fileHandle.seek(position, Deno.SeekMode.Start)
+    for await (const data of blob.stream()) {
+      await this.fileHandle.write(data)
     }
-    await this.fileHandle.seek(this.position, Deno.SeekMode.Start)
-    const written = await this.fileHandle.write(chunk)
-    this.position += written
-    this.size = Math.max(this.size, this.position)
+    this.size = Math.max(this.size, position + blob.size)
+  }
+
+  /**
+   * Truncate (or zero-extend) the file to exactly `size` bytes.
+   *
+   * @param {number} size
+   */
+  async truncate (size) {
+    await this.fileHandle.truncate(size)
+    this.size = size
   }
 
   async close () {
