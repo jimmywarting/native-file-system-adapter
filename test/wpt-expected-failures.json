@@ -8,5 +8,6 @@
   "FileSystemBaseHandle-isSameEntry.js": [],
   "FileSystemBaseHandle-remove.js": [],
   "FileSystemFileHandle-move.js": [],
-  "FileSystemWritableFileStream.js": []
+  "FileSystemWritableFileStream.js": [],
+  "FileSystemWritableFileStream-mode.js": []
 }

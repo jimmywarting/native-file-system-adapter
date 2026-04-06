@@ -362,6 +362,80 @@ if (nodeRoot) {
 }
 
 // ──────────────────────────────────────────────────────
+// Custom (non-WPT) extension tests
+// ──────────────────────────────────────────────────────
+
+const customScriptsDir = resolve(__dirname, 'script-tests')
+const customScripts = existsSync(customScriptsDir) ? readdirSync(customScriptsDir).filter(f => f.endsWith('.js')) : []
+
+if (customScripts.length > 0) {
+  console.log('\n\x1b[1m=== Custom Extension Tests (Memory Adapter) ===\x1b[0m\n')
+
+  currentRoot = await getOriginPrivateDirectory(import('../src/adapters/memory.js'))
+
+  globalThis.directory_test = function directory_test (func, description) {
+    promise_test(async t => {
+      currentRoot = await getOriginPrivateDirectory(import('../src/adapters/memory.js'))
+      await cleanupSandboxedFileSystem(currentRoot)
+      t.add_cleanup(async () => {
+        await cleanupSandboxedFileSystem(currentRoot)
+      })
+      await func(t, currentRoot)
+    }, description)
+  }
+
+  for (const script of customScripts) {
+    console.log(`\n\x1b[1m${script}\x1b[0m`)
+    const scriptPath = pathToFileURL(resolve(customScriptsDir, script)).href
+    await import(scriptPath)
+    const { passed, failed, total, failures } = await runTests()
+    totalPassed += passed
+    totalFailed += failed
+    totalTests += total
+    for (const f of failures) {
+      allScriptFailures.push({ script, description: f.description })
+    }
+  }
+
+  if (nodeRoot) {
+    const nodeAdapter = await import('../src/adapters/node.js')
+
+    globalThis.directory_test = function directory_test (func, description) {
+      promise_test(async t => {
+        currentRoot = await getOriginPrivateDirectory(import('../src/adapters/node.js'), testFolderPath)
+        if (nodeAdapter.clearLocks) nodeAdapter.clearLocks()
+        await cleanupSandboxedFileSystem(currentRoot)
+        t.add_cleanup(async () => {
+          await cleanupSandboxedFileSystem(currentRoot)
+          if (nodeAdapter.clearLocks) nodeAdapter.clearLocks()
+        })
+        await func(t, currentRoot)
+      }, description)
+    }
+
+    console.log('\n\x1b[1m=== Custom Extension Tests (Node.js File System Adapter) ===\x1b[0m\n')
+
+    if (!existsSync(testFolderPath)) mkdirSync(testFolderPath)
+    currentRoot = await getOriginPrivateDirectory(import('../src/adapters/node.js'), testFolderPath)
+
+    for (const script of customScripts) {
+      console.log(`\n\x1b[1m${script}\x1b[0m`)
+      const scriptPath = pathToFileURL(resolve(customScriptsDir, script)).href + '?adapter=node2'
+      await import(scriptPath)
+      const { passed, failed, total, failures } = await runTests()
+      totalPassed += passed
+      totalFailed += failed
+      totalTests += total
+      for (const f of failures) {
+        allScriptFailures.push({ script, description: f.description })
+      }
+    }
+
+    try { rmSync(testFolderPath, { recursive: true }) } catch (e) { /* ignore */ }
+  }
+}
+
+// ──────────────────────────────────────────────────────
 // Summary
 // ──────────────────────────────────────────────────────
 
