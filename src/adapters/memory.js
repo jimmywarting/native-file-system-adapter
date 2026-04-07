@@ -5,6 +5,24 @@ import { BlobSink } from './blobsink.js'
 const { File, Blob, DOMException } = config
 const { GONE, MISMATCH, MOD_ERR, SYNTAX, DISALLOWED, NO_MOD } = errors
 
+/**
+ * Build a slash-separated path string by traversing the parent chain.
+ * The root handle has an empty name and no parent, so the path starts
+ * with '/' followed by each ancestor name, e.g. '/dir1/subdir/file.txt'.
+ *
+ * @param {FileHandle|FolderHandle} handle
+ * @returns {string}
+ */
+function getHandlePath (handle) {
+  const parts = []
+  let current = handle
+  while (current && current.name) {
+    parts.unshift(current.name)
+    current = current._parent
+  }
+  return '/' + parts.join('/')
+}
+
 export class Sink extends BlobSink {
 
   /**
@@ -254,6 +272,10 @@ export class FileHandle {
       delete this._parent._entries[name]
     }
   }
+
+  serialize () {
+    return { kind: this.kind, name: this.name, path: getHandlePath(this) }
+  }
 }
 
 export class FolderHandle {
@@ -379,6 +401,33 @@ export class FolderHandle {
       delete this._parent._entries[name]
     }
   }
+
+  serialize () {
+    return { kind: this.kind, name: this.name, path: getHandlePath(this) }
+  }
+}
+
+/**
+ * Reconstruct a raw adapter handle from a previously serialized object by
+ * navigating from a root FolderHandle.  Because the memory adapter stores
+ * everything in memory, the root must be the same instance that was used when
+ * the handle was created.
+ *
+ * @param {{ kind: 'file'|'directory', name: string, path: string }} data
+ * @param {FolderHandle} root - The root FolderHandle of the in-memory tree.
+ * @returns {Promise<FileHandle|FolderHandle>}
+ */
+export async function deserialize (data, root) {
+  const segments = data.path.split('/').filter(Boolean)
+  const name = segments.pop()
+  let current = root
+  for (const segment of segments) {
+    current = await current.getDirectoryHandle(segment, { create: false })
+  }
+  if (data.kind === 'file') {
+    return current.getFileHandle(name, { create: false })
+  }
+  return current.getDirectoryHandle(name, { create: false })
 }
 
 export default () => new FolderHandle('')

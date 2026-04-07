@@ -241,6 +241,10 @@ export class FileHandle {
       throw err
     })
   }
+
+  serialize () {
+    return { kind: this.kind, name: this.name, path: this._path }
+  }
 }
 
 export class FolderHandle {
@@ -381,6 +385,21 @@ export class FolderHandle {
       await fs.unlink(path)
     }
   }
+
+  serialize () {
+    return { kind: this.kind, name: this.name, path: this._path }
+  }
+}
+
+/**
+ * Reconstruct a FileHandle or FolderHandle from a previously serialized object.
+ *
+ * @param {{ kind: 'file'|'directory', name: string, path: string }} data
+ * @returns {FileHandle|FolderHandle}
+ */
+export function deserialize (data) {
+  if (data.kind === 'file') return new FileHandle(data.path, data.name)
+  return new FolderHandle(data.path, data.name)
 }
 
 export default path => new FolderHandle(path, '', true)

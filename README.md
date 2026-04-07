@@ -201,6 +201,88 @@ await writer.write(blob)
 await writer.close()
 ```
 
+### Serializable handles
+
+Any handle backed by an adapter that supports serialization can be converted to a
+plain JSON-safe object with `handle.serialize()` and later reconstructed with the
+top-level `deserialize()` helper.
+
+#### Node adapter (persists across sessions)
+
+```js
+import { getOriginPrivateDirectory, deserialize } from 'native-file-system-adapter'
+import * as nodeAdapter from 'native-file-system-adapter/src/adapters/node.js'
+
+// Obtain a handle the normal way
+const root = await getOriginPrivateDirectory(nodeAdapter, './data')
+const fileHandle = await root.getFileHandle('notes.txt', { create: true })
+
+// Serialize to a plain object (JSON-safe)
+const serialized = fileHandle.serialize()
+// { kind: 'file', name: 'notes.txt', path: '/absolute/path/data/notes.txt' }
+
+// Store it anywhere — localStorage, IndexedDB, a database, …
+localStorage.setItem('savedHandle', JSON.stringify(serialized))
+
+// ─── Later, in another session ────────────────────────────────────────────────
+
+const data = JSON.parse(localStorage.getItem('savedHandle'))
+const restored = await deserialize(data, nodeAdapter)
+// restored is a fully functional FileSystemFileHandle
+const text = await (await restored.getFile()).text()
+```
+
+Directory handles work the same way:
+
+```js
+const dirHandle = await root.getDirectoryHandle('docs', { create: true })
+const serialized = dirHandle.serialize()
+// { kind: 'directory', name: 'docs', path: '/absolute/path/data/docs' }
+
+const restoredDir = await deserialize(serialized, nodeAdapter)
+for await (const [name] of restoredDir) {
+  console.log(name)
+}
+```
+
+#### Memory adapter (within the same session only)
+
+The memory adapter stores everything in RAM, so handles can only be
+deserialized within the same process/session that created them.  A reference
+to the raw root `FolderHandle` (the object returned by `memoryAdapter.default()`)
+must be passed as the third argument.
+
+```js
+import { getOriginPrivateDirectory, deserialize } from 'native-file-system-adapter'
+import * as memoryAdapter from 'native-file-system-adapter/src/adapters/memory.js'
+import { FileSystemDirectoryHandle } from 'native-file-system-adapter'
+
+// Create a shared raw root that both the wrapped handle and deserialize() use
+const rawRoot = memoryAdapter.default()
+const root = new FileSystemDirectoryHandle(rawRoot)
+
+const fileHandle = await root.getFileHandle('temp.txt', { create: true })
+const writable = await fileHandle.createWritable()
+await writable.write('hello')
+await writable.close()
+
+// Serialize
+const serialized = fileHandle.serialize()
+// { kind: 'file', name: 'temp.txt', path: '/temp.txt' }
+
+// Deserialize — pass rawRoot so the adapter can navigate the in-memory tree
+const restored = await deserialize(serialized, memoryAdapter, rawRoot)
+const text = await (await restored.getFile()).text()
+// → 'hello'
+```
+
+#### Security note
+
+The serialized object may expose absolute file-system paths.  This is
+intentional — this library is primarily used as a server-side or polyfill
+utility where path privacy is not a concern.  Do not expose serialized handles
+to untrusted clients.
+
 ## Supported browsers
 
 When importing as an ES module, browsers that support [dynamic imports](https://caniuse.com/es6-module-dynamic-import) and ES2018 features are a minimum requirement. When using a bundler, this restriction is no longer applicable.
@@ -212,7 +294,6 @@ For drag and drop, the `getAsFileSystemHandle()` polyfill depends on the `File a
 
 ## Limitations
 
-- Storing a file handle in IndexedDB or sharing it with postMessage isn't currently possible unless you use native.
 - `showDirectoryPicker` and `showOpenFilePicker` will not throw any `AbortError`s (e.g. user cancellations) when using a fallback input element
 - `showSaveFilePicker` may not actually show any prompt when using a fallback with `<a download>`
 - Cache adapter only works in secure (HTTPS) contexts `window.isSecureContext === true`

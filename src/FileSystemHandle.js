@@ -88,6 +88,28 @@ class FileSystemHandle {
     ) return false
     return this[kAdapter].isSameEntry(other[kAdapter])
   }
+
+  /**
+   * Serialize this handle to a plain JSON-safe object that can be stored or
+   * transferred and later passed to the top-level `deserialize()` function to
+   * reconstruct an equivalent handle.
+   *
+   * The adapter backing this handle must implement a `serialize()` method;
+   * adapters that do not support serialization throw a `DOMException` with name
+   * `'NotSupportedError'`.
+   *
+   * @returns {{ kind: 'file'|'directory', name: string, [key: string]: any }}
+   */
+  serialize () {
+    const adapter = this[kAdapter]
+    if (typeof adapter.serialize !== 'function') {
+      throw new DOMException(
+        'The adapter backing this handle does not support serialization.',
+        'NotSupportedError'
+      )
+    }
+    return adapter.serialize()
+  }
 }
 
 Object.defineProperty(FileSystemHandle.prototype, Symbol.toStringTag, {
