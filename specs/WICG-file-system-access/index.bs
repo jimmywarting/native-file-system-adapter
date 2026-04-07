@@ -1,0 +1,1145 @@
+<pre class=metadata>
+Title: File System Access
+Shortname: file-system-access
+Abstract: This document extends the API in [[FS]] to enable developers to build
+  powerful web apps that interact with files on the user's local device.
+  It builds on [[FILE-API|File API]] for file reading capabilities, and adds new API
+  surface to enable modifying files, as well as working with directories.
+Status: CG-DRAFT
+ED: https://wicg.github.io/file-system-access/
+Level: 1
+Editor: Ming-Ying Chung, Google, mych@chromium.org, w3cid 139196
+Former Editor: Austin Sullivan, Google, asully@chromium.org, w3cid 126126
+Former Editor: Marijn Kruisselbrink, Google, mek@chromium.org, w3cid 72440
+Group: WICG
+Repository: wicg/file-system-access
+Indent: 2
+Complain About: accidental-2119 yes, missing-example-ids yes
+Markup Shorthands: css no, markdown yes
+</pre>
+
+<pre class=link-defaults>
+spec:webidl; type:dfn; text:resolve
+</pre>
+
+<pre class=anchors>
+urlPrefix: https://tc39.github.io/ecma262/; spec: ECMA-262
+  type: dfn; text: realm; url: realm
+urlPrefix: https://storage.spec.whatwg.org/; spec: storage
+  type: dfn; text: storage; url: site-storage
+urlPrefix: https://www.w3.org/TR/webdriver-bidi/; spec: webdriver-bidi
+  type: dfn; text: WebDriver BiDi file dialog opened; url: webdriver-bidi-file-dialog-opened
+</pre>
+
+<style>
+.domintro dt {
+    font-family: Menlo, Consolas, "DejaVu Sans Mono", Monaco, monospace;
+
+    padding-top: 0.5em;
+    padding-bottom: 1em;
+}
+.domintro dt a {
+    color: inherit; border-bottom-style: none;
+}
+.domintro dt code {
+    font-size: inherit;
+}
+.domintro::before {
+    content: 'For web developers (non-normative)';
+    text-transform: initial;
+
+}
+</style>
+
+# Introduction # {#introduction}
+
+*This section is non-normative.*
+
+This API enables developers to build powerful apps that interact with other
+(non-Web) apps on the user's device via the device's file system. Prominent
+examples of applications where users expect this functionality are IDEs,
+photo and video editors, text editors, and more.
+After a user grants a web app access, this API allows the app to read or save
+changes directly to files and folders on the user's device. Beyond reading and
+writing files, this API provides the ability to open a directory and enumerate
+its contents. Additionally, web apps can use this API to store references to
+files and directories they've been given access to, allowing the web apps to
+later regain access to the same content without requiring the user to select the
+same file again.
+
+This API is similar to <a href="https://html.spec.whatwg.org/multipage/input.html#file-upload-state-(type=file)">`<input type=file>`</a>
+and <a href="https://wicg.github.io/entries-api/#html-forms">`<input type=file webkitdirectory>`</a>
+[[entries-api]]
+in that user interaction happens through file and directory picker dialogs.
+Unlike those APIs, this API is currently purely a javascript API, and
+does not integrate with forms and/or input elements.
+
+This API extends the API in [[FS]], which specifies a [=/bucket file system=]
+which websites can get access to without having to first prompt the user for access.
+
+# Files and Directories # {#files-and-directories}
+
+## Concepts ## {#concepts}
+
+A <dfn>valid suffix code point</dfn> is a [=code point=] that is [=ASCII alphanumeric=],
+U+002B (+), or U+002E (.).
+
+Note: These code points were chosen to support most pre-existing file formats. The vast
+majority of file extensions are purely alphanumeric, but compound extensions (such as
+`.tar.gz`) and extensions such as `.c++` for C++ source code are also fairly common,
+hence the inclusion of + and . as allowed code points.
+
+## Permissions ## {#permissions}
+
+The <dfn for=PermissionName enum-value>"file-system"</dfn> [=powerful feature=]'s
+permission-related algorithms and types are defined as follows:
+
+: [=permission descriptor type=]
+:: {{FileSystemPermissionDescriptor}}, defined as:
+  <xmp class=idl>
+  enum FileSystemPermissionMode {
+    "read",
+    "readwrite"
+  };
+
+  dictionary FileSystemPermissionDescriptor : PermissionDescriptor {
+    required FileSystemHandle handle;
+    FileSystemPermissionMode mode = "read";
+  };
+  </xmp>
+
+: [=permission state constraints=]
+:: <div algorithm="permission state constraints">
+  To determine [=permission state constraints=] for a {{FileSystemPermissionDescriptor}} |desc|,
+  run these steps:
+
+  1. Let |entry| be |desc|["{{FileSystemPermissionDescriptor/handle}}"]'s
+     [=FileSystemHandle/entry=].
+  1. If |entry| represents a [=/file system entry=] in a [=/bucket file system=],
+     this descriptor's [=permission state=] must always be
+     "{{PermissionState/granted}}".
+  1. Otherwise, if |entry|'s [=file system entry/parent=] is not null, this descriptor's [=permission state=] must be
+     equal to the [=permission state=] for a descriptor with the same {{FileSystemPermissionDescriptor/mode}},
+     and a {{FileSystemPermissionDescriptor/handle}} representing |entry|'s [=file system entry/parent=].
+  1. Otherwise, if |desc|["{{FileSystemPermissionDescriptor/mode}}"] is
+     "{{FileSystemPermissionMode/readwrite}}":
+    1. Let |read state| be the [=permission state=] for a descriptor
+       with the same {{FileSystemPermissionDescriptor/handle}},
+       but whose {{FileSystemPermissionDescriptor/mode}} is
+       "{{FileSystemPermissionMode/read}}".
+    1. If |read state| is not "{{PermissionState/granted}}", this descriptor's [=permission state=]
+       must be equal to |read state|.
+
+Issue(whatwg/fs#101): Make these checks no longer associated with an entry.
+
+: [=permission request algorithm=]
+:: <div algorithm="permission request algorithm">
+  Given a {{FileSystemPermissionDescriptor}} |desc| and a {{PermissionStatus}} |status|,
+  run these steps:
+
+  1. Run the [=default permission query algorithm=] on |desc| and |status|.
+  1. If |status|'s {{PermissionStatus/state}} is not
+     "{{PermissionState/prompt}}", then abort these steps.
+  1. Let |settings| be |desc|["{{FileSystemPermissionDescriptor/handle}}"]'s
+     [=relevant settings object=].
+  1. Let |global| be |settings|'s [=environment settings object/global object=].
+  1. If |global| is not a {{Window}}, then
+     [=throw=] a "{{SecurityError}}" {{DOMException}}.
+  1. If |global| does not have [=transient activation=], then
+     [=throw=] a "{{SecurityError}}" {{DOMException}}.
+  1. If |settings|'s [=environment settings object/origin=]
+     is not [=same origin=] with |settings|'s [=top-level origin=], then
+     [=throw=] a "{{SecurityError}}" {{DOMException}}.
+  1. [=Request permission to use=] |desc|.
+  1. Run the [=default permission query algorithm=] on |desc| and |status|.
+
+  Issue(WICG/permissions-request#2): Ideally this user activation requirement would be defined upstream.
+
+<div algorithm>
+To <dfn lt="querying file system permission|query file system permission">query file system permission</dfn>
+given a {{FileSystemHandle}} |handle| and a {{FileSystemPermissionMode}} |mode|, run these steps:
+
+1. Let |desc| be a {{FileSystemPermissionDescriptor}}.
+1. Set |desc|["{{PermissionDescriptor/name}}"] to
+   "{{PermissionName/file-system}}".
+1. Set |desc|["{{FileSystemPermissionDescriptor/handle}}"] to |handle|.
+1. Set |desc|["{{FileSystemPermissionDescriptor/mode}}"] to |mode|.
+1. Return |desc|'s [=permission state=].
+
+</div>
+
+<div algorithm>
+To <dfn lt="requesting file system permission|request file system permission">request file system permission</dfn>
+given a {{FileSystemHandle}} |handle| and a {{FileSystemPermissionMode}} |mode|, run these steps:
+
+1. Let |desc| be a {{FileSystemPermissionDescriptor}}.
+1. Set |desc|["{{PermissionDescriptor/name}}"] to
+   "{{PermissionName/file-system}}".
+1. Set |desc|["{{FileSystemPermissionDescriptor/handle}}"] to |handle|.
+1. Set |desc|["{{FileSystemPermissionDescriptor/mode}}"] to |mode|.
+1. Let |status| be the result of running <a spec=permissions>create a PermissionStatus</a> for |desc|.
+1. Run the [=permission request algorithm=] for the
+   "{{PermissionName/file-system}}" feature, given |desc| and |status|.
+1. Return |desc|'s [=permission state=].
+
+</div>
+
+Issue(119): Currently {{FileSystemPermissionMode}} can only be
+"{{FileSystemPermissionMode/read}}" or "{{FileSystemPermissionMode/readwrite}}".
+In the future we might want to add a "write" mode as well to support write-only
+handles.
+
+## The {{FileSystemHandle}} interface ## {#api-filesystemhandle}
+
+<xmp class=idl>
+dictionary FileSystemHandlePermissionDescriptor {
+  FileSystemPermissionMode mode = "read";
+};
+
+[Exposed=(Window,Worker), SecureContext, Serializable]
+partial interface FileSystemHandle {
+  Promise<PermissionState> queryPermission(optional FileSystemHandlePermissionDescriptor descriptor = {});
+  Promise<PermissionState> requestPermission(optional FileSystemHandlePermissionDescriptor descriptor = {});
+};
+</xmp>
+
+### The {{FileSystemHandle/queryPermission()}} method ### {#api-filesystemhandle-querypermission}
+
+<div class="note domintro">
+  : |status| = await |handle| . {{FileSystemHandle/queryPermission()|queryPermission}}({ {{FileSystemHandlePermissionDescriptor/mode}} : "{{FileSystemPermissionMode/read}}" })
+  : |status| = await |handle| . {{FileSystemHandle/queryPermission()}}
+  : |status| = (await navigator.{{Navigator/permissions}}.{{Permissions/query()|query}}({ {{PermissionDescriptor/name}} : "{{PermissionName/file-system}}", {{FileSystemPermissionDescriptor/handle}} : |handle| })).{{PermissionStatus/state}}
+  :: Queries the current state of the read permission of this handle.
+     If this returns "{{PermissionState/prompt}}" the website will have to call
+     {{FileSystemHandle/requestPermission()}} before any operations on the
+     handle can be done.
+     If this returns "{{PermissionState/denied}}" any operations will reject.
+
+     Usually handles returned by the [=local file system handle factories=] will
+     initially return "{{PermissionState/granted}}" for their read permission
+     state, however other than through the user revoking permission, a handle
+     retrieved from IndexedDB is also likely to return
+     "{{PermissionState/prompt}}".
+
+  : |status| = await |handle| . {{FileSystemHandle/queryPermission()|queryPermission}}({ {{FileSystemHandlePermissionDescriptor/mode}} : "{{FileSystemPermissionMode/readwrite}}" })
+  : |status| = (await navigator.{{Navigator/permissions}}.{{Permissions/query()|query}}({ {{PermissionDescriptor/name}} : "{{PermissionName/file-system}}", {{FileSystemPermissionDescriptor/handle}} : |handle|, {{FileSystemPermissionDescriptor/mode}} : "{{FileSystemPermissionMode/readwrite}}" }).{{PermissionStatus/state}}
+  :: Queries the current state of the write permission of this handle.
+     If this returns "{{PermissionState/prompt}}", attempting to modify the
+     file or directory this handle represents will require user activation
+     and will result in a confirmation prompt being shown to the user.
+     However if the state of the read permission of this handle is also
+     "{{PermissionState/prompt}}" the website will need to call
+     {{FileSystemHandle/requestPermission()}}.
+     There is no automatic prompting for read access when attempting to
+     read from a file or directory.
+</div>
+
+Advisement: The integration with the permissions API's {{Permissions/query()}} method is not yet implemented in Chrome.
+
+<div algorithm>
+The <dfn method for=FileSystemHandle>queryPermission(|descriptor|)</dfn> method, when invoked, must run these steps:
+
+1. Let |result| be [=a new promise=].
+1. Run the following steps [=in parallel=]:
+  1. Let |state| be the result of [=querying file system permission=]
+     given <b>[=this=]</b> and
+     |descriptor|["{{FileSystemHandlePermissionDescriptor/mode}}"].
+  1. [=/Resolve=] |result| with |state|.
+1. Return |result|.
+
+</div>
+
+### The {{FileSystemHandle/requestPermission()}} method ### {#api-filesystemhandle-requestpermission}
+
+<div class="note domintro">
+  : |status| = await |handle| . {{FileSystemHandle/requestPermission()|requestPermission}}({ {{FileSystemHandlePermissionDescriptor/mode}} : "{{FileSystemPermissionMode/read}}" })
+  : |status| = await |handle| . {{FileSystemHandle/requestPermission()}}
+  :: If the state of the read permission of this handle is anything other than
+     "{{PermissionState/prompt}}", this will return that state directly.
+     If it is "{{PermissionState/prompt}}" however, user activation is needed and
+     this will show a confirmation prompt to the user.
+     The new read permission state is then returned, depending on
+     the user's response to the prompt.
+
+  : |status| = await |handle| . {{FileSystemHandle/requestPermission()|requestPermission}}({ {{FileSystemHandlePermissionDescriptor/mode}} : "{{FileSystemPermissionMode/readwrite}}" })
+  :: If the state of the write permission of this handle is anything other than
+     "{{PermissionState/prompt}}", this will return that state directly.
+     If the status of the read permission of this handle is
+     "{{PermissionState/denied}}" this will return that.
+
+     Otherwise the state of the write permission is "{{PermissionState/prompt}}"
+     and this will show a confirmation prompt to the user.
+     The new write permission state is then returned, depending on
+     what the user selected.
+</div>
+
+<div algorithm>
+The <dfn method for=FileSystemHandle>requestPermission(|descriptor|)</dfn> method, when invoked, must run these steps:
+
+1. Let |result| be [=a new promise=].
+1. Run the following steps [=in parallel=]:
+  1. Let |state| be the result of [=requesting file system permission=]
+     given <b>[=this=]</b> and
+     |descriptor|["{{FileSystemHandlePermissionDescriptor/mode}}"].
+     If that throws an exception, [=/reject=] |result| with that exception and abort.
+  1. [=/Resolve=] |result| with |state|.
+1. Return |result|.
+
+</div>
+
+# Accessing Local File System # {#local-filesystem}
+
+<xmp class=idl>
+enum WellKnownDirectory {
+  "desktop",
+  "documents",
+  "downloads",
+  "music",
+  "pictures",
+  "videos",
+};
+
+typedef (WellKnownDirectory or FileSystemHandle) StartInDirectory;
+
+dictionary FilePickerAcceptType {
+    USVString description = "";
+    record<USVString, (USVString or sequence<USVString>)> accept;
+};
+
+dictionary FilePickerOptions {
+    sequence<FilePickerAcceptType> types;
+    boolean excludeAcceptAllOption = false;
+    DOMString id;
+    StartInDirectory startIn;
+};
+
+dictionary OpenFilePickerOptions : FilePickerOptions {
+    boolean multiple = false;
+};
+
+dictionary SaveFilePickerOptions : FilePickerOptions {
+    USVString? suggestedName;
+};
+
+dictionary DirectoryPickerOptions {
+    DOMString id;
+    StartInDirectory startIn;
+    FileSystemPermissionMode mode = "read";
+};
+
+[SecureContext]
+partial interface Window {
+    Promise<sequence<FileSystemFileHandle>> showOpenFilePicker(optional OpenFilePickerOptions options = {});
+    Promise<FileSystemFileHandle> showSaveFilePicker(optional SaveFilePickerOptions options = {});
+    Promise<FileSystemDirectoryHandle> showDirectoryPicker(optional DirectoryPickerOptions options = {});
+};
+</xmp>
+
+The {{showOpenFilePicker()}}, {{showSaveFilePicker()}} and {{showDirectoryPicker()}} methods
+are together known as the <dfn>local file system handle factories</dfn>.
+
+Note: What is referred to as the "local file system" in this spec, does not have to
+strictly refer to the file system on the local device. What we call the local file system
+could just as well be backed by a cloud provider. For example on Chrome OS these
+file pickers will also let you pick files and directories on Google Drive.
+
+Advisement: In Chrome versions earlier than 85, this was implemented as a generic `chooseFileSystemEntries` method.
+
+## Local File System Permissions ## {#local-file-system-permissions}
+
+The fact that the user picked the specific files returned by the [=local file system handle factories=] in a prompt
+should be treated by the user agent as the user intending to grant read access to the website
+for the returned files. As such, at the time the promise returned by one of the [=local file system handle factories=]
+resolves, [=permission state=] for a descriptor with {{FileSystemPermissionDescriptor/handle}} set to the returned handle,
+and {{FileSystemPermissionDescriptor/mode}} set to "{{FileSystemPermissionMode/read}}"
+should be "{{PermissionState/granted}}".
+
+Additionally for calls to {{showSaveFilePicker}}
+the [=permission state=] for a descriptor with {{FileSystemPermissionDescriptor/handle}} set to the returned handle,
+and {{FileSystemPermissionDescriptor/mode}} set to "{{FileSystemPermissionMode/readwrite}}"
+should be "{{PermissionState/granted}}".
+
+<div algorithm>
+To verify that an |environment| <dfn>is allowed to show a file picker</dfn>, run these steps:
+
+1. If |environment|'s [=environment settings object/origin=] is an [=opaque origin=],
+   return [=a promise rejected with=] a "{{SecurityError}}" {{DOMException}}.
+
+1. If |environment|'s [=environment settings object/origin=] is not [=same origin=] with
+   |environment|'s [=top-level origin=],
+   return [=a promise rejected with=] a "{{SecurityError}}" {{DOMException}}.
+
+1. Let |global| be |environment|'s [=environment settings object/global object=].
+
+1. If |global| does not have [=transient activation=], then
+   [=throw=] a "{{SecurityError}}" {{DOMException}}.
+
+</div>
+
+## File picker options ## {#api-filepickeroptions}
+
+### Accepted file types ### {#api-filepickeroptions-types}
+
+<div class="note domintro">
+The {{showOpenFilePicker(options)}} and {{showSaveFilePicker(options)}} methods accept a
+{{FilePickerOptions}} argument, which lets the website specify the types of files
+the file picker will let the user select.
+
+Each entry in {{FilePickerOptions/types}} specifies a single user selectable option
+for filtering the files displayed in the file picker.
+
+Each option consists of an <span class=allow-2119>optional</span> {{FilePickerAcceptType/description}}
+and a number of MIME types and extensions (specified as a mapping of
+MIME type to a list of extensions). If no description is provided one will be generated.
+Extensions have to be strings that start with a "." and only contain [=valid suffix code points=].
+Additionally extensions are limited to a length of 16 code points.
+
+In addition to complete MIME types, "\*" can be used as the subtype of a MIME type to match
+for example all image formats with "image/\*".
+
+Websites <span class=allow-2119>should</span> always provide both MIME types and file
+extensions for each option. On platforms that only use file extensions to describe file types
+user agents can match on the extensions, while on platforms that don't use extensions,
+user agents can match on MIME type.
+
+By default the file picker will also include an option to not apply any filter,
+letting the user select any file. Set {{excludeAcceptAllOption}} to `true` to not
+include this option in the file picker.
+
+For example , the following options will let the user pick one of three different filters.
+One for text files (either plain text or HTML), one for images, and a third one that doesn't apply
+any filter and lets the user select any file.
+
+<pre class=example id="filepickeroptions-types-example1" highlight=js>
+const options = {
+  <l>{{FilePickerOptions/types}}</l>: [
+    {
+      <l>{{FilePickerAcceptType/description}}</l>: 'Text Files',
+      <l>{{FilePickerAcceptType/accept}}</l>: {
+        'text/plain': ['.txt', '.text'],
+        'text/html': ['.html', '.htm']
+      }
+    },
+    {
+      <l>{{FilePickerAcceptType/description}}</l>: 'Images',
+      <l>{{FilePickerAcceptType/accept}}</l>: {
+        'image/*': ['.png', '.gif', '.jpeg', '.jpg']
+      }
+    }
+  ],
+};
+</pre>
+
+On the other hand, the following example will only let the user select SVG files. The dialog
+will not show an option to not apply any filters.
+
+<pre class=example id="filepickeroptions-types-example2" highlight=js>
+const options = {
+  <l>{{FilePickerOptions/types}}</l>: [
+    {
+      <l>{{FilePickerAcceptType/accept}}</l>: {
+        'image/svg+xml': '.svg'
+      }
+    },
+  ],
+  <l>{{FilePickerOptions/excludeAcceptAllOption}}</l>: true
+};
+</pre>
+
+</div>
+
+<div algorithm>
+To <dfn>process accept types</dfn>, given {{FilePickerOptions}} |options|,
+run these steps:
+
+1. Let |accepts options| be a empty [=/list=] of [=tuples=]
+   consisting of a description and a filter.
+1. [=list/For each=] |type| of |options|["{{FilePickerOptions/types}}"]:
+  1. [=map/For each=] |typeString| → |suffixes| of
+     |type|["{{FilePickerAcceptType/accept}}"]:
+    1. Let |parsedType| be the result of [=parse a MIME type=] with |typeString|.
+    1. If |parsedType| is failure, then [=throw=] a {{TypeError}}.
+    1. If |parsedType|'s [=MIME type/parameters=] are not empty, then
+       [=throw=] a {{TypeError}}.
+    1. If |suffixes| is a string:
+      1. [=Validate a suffix=] given |suffixes|.
+    1. Otherwise, [=list/for each=] |suffix| of |suffixes|:
+      1. [=Validate a suffix=] given |suffix|.
+
+  1. Let |filter| be these steps, given a |filename| (a [=string=]) and a |type| (a [=MIME type=]):
+    1. [=map/For each=] |typeString| → |suffixes| of
+       |type|["{{FilePickerAcceptType/accept}}"]:
+    1. Let |parsedType| be the result of [=parse a MIME type=] with |typeString|.
+      1. If |parsedType|'s [=MIME type/subtype=] is "*":
+        1. If |parsedType|'s [=MIME type/type=] is "*", return `true`.
+        1. If |parsedType|'s [=MIME type/type=] is |type|'s [=MIME type/type=], return `true`.
+      1. |parsedType|'s [=MIME type/essence=] is |type|'s [=MIME type/essence=], return `true`.
+      1. If |suffixes| is a string, set |suffixes| to « |suffixes| ».
+      1. [=list/For each=] |suffix| of |suffixes|:
+        1. If |filename| ends with |suffix|, return `true`.
+    1. Return `false`.
+
+  1. Let |description| be |type|["{{FilePickerAcceptType/description}}"].
+  1. If |description| is an empty string,
+    set |description| to some user understandable string describing |filter|.
+
+  1. [=list/Append=] (|description|, |filter|) to |accepts options|.
+
+1. If either |accepts options| is [=list/empty=],
+  or |options|["{{FilePickerOptions/excludeAcceptAllOption}}"] is `false`:
+  1. Let |description| be a user understandable string describing "all files".
+    1. Let |filter| be an algorithm that returns `true`.
+    1. [=list/Append=] (|description|, |filter|) to |accepts options|.
+
+1. If |accepts options| is empty, then [=throw=] a {{TypeError}}.
+
+1. Return |accepts options|.
+
+</div>
+
+<div algorithm>
+To <dfn>validate a suffix</dfn> |suffix|, run the following steps:
+
+1. If |suffix| does not [=string/starts with|start with=] ".", then
+   [=throw=] a {{TypeError}}.
+1. If |suffix| contains any [=code points=] that are not
+   [=valid suffix code points=], then [=throw=] a {{TypeError}}.
+1. If |suffix| ends with ".", then [=throw=] a {{TypeError}}.
+1. If |suffix|'s [=string/length=] is more than 16, then
+   [=throw=] a {{TypeError}}.
+
+</div>
+
+### Starting Directory ### {#api-filepickeroptions-starting-directory}
+
+<div class="note domintro">
+The {{FilePickerOptions/id}} and {{FilePickerOptions/startIn}} fields can be specified to suggest
+the directory in which the file picker opens.
+
+If neither of these options are specified, the user agent remembers the last directory a file
+or directory was picked from, and new pickers will start out in that directory. By specifying an
+{{FilePickerOptions/id}} the user agent can remember different directories for different IDs
+(user agents will only remember directories for a limited number of IDs).
+
+<pre class=example id="filepickeroptions-starting-directory-example1" highlight=js>
+// If a mapping exists from this ID to a previousy picked directory, start in
+// this directory. Otherwise, a mapping will be created from this ID to the
+// directory of the resulting file picker invocation.
+const options = {
+  <l>{{FilePickerOptions/id}}</l>: 'foo',
+};
+</pre>
+
+Specifying {{FilePickerOptions/startIn}} as a {{FileSystemFileHandle}} will result in the dialog
+starting in the parent directory of that file, while passing in a {{FileSystemDirectoryHandle}}
+will result in the dialog to start in the passed in directory. These take precedence even if
+an explicit {{FilePickerOptions/id}} is also passed in.
+
+For example, given a {{FileSystemDirectoryHandle}} <var>project_dir</var>, the following will show
+a file picker that starts out in that directory:
+
+<pre class=example id="filepickeroptions-starting-directory-example2" highlight=js>
+// The picker will open to the directory of |project_dir| regardless of whether
+// 'foo' has a valid mapping.
+const options = {
+  <l>{{FilePickerOptions/id}}</l>: 'foo',
+  <l>{{FilePickerOptions/startIn}}</l>: |project_dir|,
+};
+</pre>
+
+The {{FilePickerOptions/id}} and {{FilePickerOptions/startIn}} fields control only
+the directory the picker opens to. In the above example, it cannot be assumed that
+the {{FilePickerOptions/id}} 'foo' will map to the same directory as |project_dir|
+once the file picker operation has completed.
+
+Specifying {{FilePickerOptions/startIn}} as a {{WellKnownDirectory}} will result in the dialog
+starting in that directory, unless an explicit {{FilePickerOptions/id}} was also passed
+in which has a mapping to a valid directory.
+
+Below is an example of specifying both an {{FilePickerOptions/id}} and
+{{FilePickerOptions/startIn}} as a {{WellKnownDirectory}}. If there is an existing
+mapping from the given ID to a path, this mapping is used. Otherwise, the path suggested
+via the {{WellKnownDirectory}} is used.
+
+<pre class=example id="filepickeroptions-starting-directory-example3" highlight=js>
+// First time specifying the ID 'foo'. It is not mapped to a directory.
+// The file picker will fall back to opening to the Downloads directory. TODO: link this.
+const options = {
+  <l>{{FilePickerOptions/id}}</l>: 'foo',  // Unmapped.
+  <l>{{FilePickerOptions/startIn}}</l>: "<l>{{WellKnownDirectory/downloads}}</l>",  // Start here.
+};
+
+// Later...
+
+// The ID 'foo' might or might not be mapped. For example, the mapping for this ID
+// might have been evicted.
+const options = {
+  <l>{{FilePickerOptions/id}}</l>: 'foo',  // Maybe mapped. If so, start here.
+  <l>{{FilePickerOptions/startIn}}</l>: "<l>{{WellKnownDirectory/downloads}}</l>",  // Otherwise, start here.
+};
+</pre>
+
+</div>
+
+Advisement: The {{FilePickerOptions/startIn}} and {{FilePickerOptions/id}} options were first introduced in Chrome 91.
+
+A user agent holds a <dfn>recently picked directory map</dfn>, which is a
+[=map=] of [=/origins=] to [=path id maps=].
+
+A <dfn>path id map</dfn> is a [=map=] of [=valid path ids=] to paths.
+
+A <dfn>valid path id</dfn> is a [=string=] where each character is [=ASCII alphanumeric=] or "_" or "-".
+
+To prevent a [=path id map=] from growing without a bound, user agents should implement
+some mechanism to limit how many recently picked directories will be remembered. This
+can for example be done by evicting least recently used entries.
+User agents should allow at least 16 entries to be stored in a [=path id map=].
+
+The <dfn enum>WellKnownDirectory</dfn> enum lets a website pick one of several well-known
+directories. The exact paths the various values of this enum map to is [=implementation-defined=]
+(and in some cases these might not even represent actual paths on disk).
+The following list describes the meaning of each of the values, and gives possible example paths on different operating systems:
+
+<dl dfn-for=WellKnownDirectory>
+: <dfn enum-value>"desktop"</dfn>
+:: The user's Desktop directory, if such a thing exists. For example this could be
+   `C:\Documents and Settings\username\Desktop`, `/Users/username/Desktop`, or `/home/username/Desktop`.
+: <dfn enum-value>"documents"</dfn>
+:: Directory in which documents created by the user would typically be stored.
+   For example `C:\Documents and Settings\username\My Documents`, `/Users/username/Documents`, or `/home/username/Documents`.
+: <dfn enum-value>"downloads"</dfn>
+:: Directory where downloaded files would typically be stored.
+   For example `C:\Documents and Settings\username\Downloads`, `/Users/username/Downloads`, or `/home/username/Downloads`.
+: <dfn enum-value>"music"</dfn>
+:: Directory where audio files would typically be stored.
+   For example `C:\Documents and Settings\username\My Documents\My Music`, `/Users/username/Music`, or `/home/username/Music`.
+: <dfn enum-value>"pictures"</dfn>
+:: Directory where photos and other still images would typically be stored.
+   For example `C:\Documents and Settings\username\My Documents\My Pictures`, `/Users/username/Pictures`, or `/home/username/Pictures`.
+: <dfn enum-value>"videos"</dfn>
+:: Directory where videos/movies would typically be stored.
+   For example `C:\Documents and Settings\username\My Documents\My Videos`, `/Users/username/Movies`, or `/home/username/Videos`.
+
+<div algorithm>
+To <dfn>determine the directory the picker will start in</dfn>, given an optional [=string=] |id|,
+an optional {{StartInDirectory}} |startIn| and an [=environment settings object=] |environment|,
+run the following steps:
+
+1. If |id| given, and is not a [=valid path id=], then
+   [=throw=] a {{TypeError}}.
+1. If |id|'s [=string/length=] is more than 32, then
+   [=throw=] a {{TypeError}}.
+
+1. Let |origin| be |environment|'s [=environment settings object/origin=].
+
+1. If |startIn| is a {{FileSystemHandle}} and |startIn| is not
+   [=FileSystemHandle/is in a bucket file system|in a bucket file system=]:
+  1. Let |entry| be the result of [=locating an entry=] given
+     |startIn|'s [=FileSystemHandle/locator=].
+  1. If |entry| is a [=file entry=], return the path of
+     |entry|'s [=file system entry/parent=] in the local file system.
+  1. If |entry| is a [=directory entry=], return
+     |entry|'s path in the local file system.
+
+1. If |id| is non-empty:
+  1. If [=recently picked directory map=][|origin|] [=map/exists=]:
+    1. Let |path map| be [=recently picked directory map=][|origin|].
+    1. If |path map|[|id|] [=map/exists=], then return |path map|[|id|].
+
+1. If |startIn| is a {{WellKnownDirectory}}:
+  1. Return a user agent defined path corresponding to the {{WellKnownDirectory}} value of |startIn|.
+
+1. If |id| is not specified, or is an empty string:
+  1. If [=recently picked directory map=][|origin|] [=map/exists=]:
+    1. Let |path map| be [=recently picked directory map=][|origin|].
+    1. If |path map|[""] [=map/exists=], then return |path map|[""].
+
+1. Return a default path in a user agent specific manner.
+
+</div>
+
+<div algorithm>
+To <dfn>remember a picked directory</dfn>, given an optional [=string=] |id|,
+a [=/file system entry=] |entry|, and an [=environment settings object=] |environment|,
+run the following steps:
+
+1. Let |origin| be |environment|'s [=environment settings object/origin=].
+1. If [=recently picked directory map=][|origin|] does not [=map/exist=],
+   then set [=recently picked directory map=][|origin|] to an empty [=path id map=].
+1. If |id| is not specified, let |id| be an empty string.
+1. Set [=recently picked directory map=][|origin|][|id|] to the path on the local file system corresponding to |entry|,
+   if such a path can be determined.
+
+</div>
+
+## The {{showOpenFilePicker()}} method ## {#api-showopenfilepicker}
+
+<div class="note domintro">
+  : [ |handle| ] = await window . {{showOpenFilePicker()}}
+  : [ |handle| ] = await window . {{showOpenFilePicker()|showOpenFilePicker}}({ {{OpenFilePickerOptions/multiple}}: false })
+  :: Shows a file picker that lets a user select a single existing file, returning a handle for
+    the selected file.
+
+  : handles = await window . {{showOpenFilePicker()|showOpenFilePicker}}({ {{OpenFilePickerOptions/multiple}}: true })
+  :: Shows a file picker that lets a user select multiple existing files, returning handles for
+    the selected files.
+
+    Additional options can be passed to {{showOpenFilePicker()}} to indicate the types of files
+    the website wants the user to select and the directory in which the
+    file picker will open. See [[#api-filepickeroptions]] for details.
+</div>
+
+<div algorithm>
+The <dfn method for=Window>showOpenFilePicker(|options|)</dfn> method, when invoked, must run
+these steps:
+
+1. Let |environment| be <b>[=this=]</b>'s [=relevant settings object=].
+
+1. Let |accepts options| be the result of [=process accept types|processing accept types=] given |options|.
+1. Let |starting directory| be the result of
+   [=determine the directory the picker will start in|determining the directory the picker will start in=]
+   given |options|["{{FilePickerOptions/id}}"],
+   |options|["{{FilePickerOptions/startIn}}"], and |environment|.
+
+1. Let |global| be |environment|'s [=environment settings object/global object=].
+1. Verify that |environment| [=is allowed to show a file picker=].
+
+1. Let |p| be [=a new promise=].
+1. Run the following steps [=in parallel=]:
+
+  1. Optionally, wait until any prior execution of this algorithm has terminated.
+
+  1. Let |filePickerOptions| be an empty [=/map=].
+
+  1. Set |filePickerOptions|["multiple"] to |options|["{{OpenFilePickerOptions/multiple}}"].
+
+  1. Let |dismissed| be the result of [=WebDriver BiDi file dialog opened=] with null and |filePickerOptions|.
+
+  1. If |dismissed| is false:
+
+    1. Display a prompt to the user requesting that the user pick some files.
+       If |filePickerOptions|["multiple"] is false, there must be no more than one file selected;
+       otherwise any number may be selected.
+
+       The displayed prompt should let the user pick one of the |accepts options| to filter the list of displayed files.
+       Exactly how this is implemented, and what this prompt looks like is [=implementation-defined=].
+
+       When possible, this prompt should start out showing |starting directory|.
+
+    1. Wait for the user to have made their selection.
+
+  1. If |dismissed| is true or if the user dismissed the prompt without making a selection,
+     [=/reject=] |p| with an "{{AbortError}}" {{DOMException}} and abort.
+
+  1. Let |entries| be a [=/list=] of [=file entries=] representing the selected files or directories.
+  1. Let |result| be a empty [=/list=].
+
+  1. [=list/For each=] |entry| of |entries|:
+    1. If |entry| is deemed [=too sensitive or dangerous=] to be exposed to this website by the user agent:
+      1. Inform the user that the selected files or directories can't be exposed to this website.
+      1. At the discretion of the user agent,
+         either go back to the beginning of these [=in parallel=] steps,
+         or [=/reject=] |p| with an "{{AbortError}}" {{DOMException}} and abort.
+
+    1. Add a new {{FileSystemFileHandle}} associated with |entry| to |result|.
+
+  1. [=Remember a picked directory=] given
+     |options|["{{FilePickerOptions/id}}"], |entries|[0] and |environment|.
+
+  1. Perform the <a spec=html>activation notification</a> steps in |global|'s [=Window/browsing context=].
+
+     Note: This lets a website immediately perform operations on the returned handles that
+     might require user activation, such as requesting more permissions.
+
+  1. [=/Resolve=] |p| with |result|.
+
+1. Return |p|.
+
+</div>
+
+## The {{Window/showSaveFilePicker()}} method ## {#api-showsavefilepicker}
+
+<div class="note domintro">
+  : |handle| = await window . {{showSaveFilePicker()|showSaveFilePicker}}( |options| )
+  :: Shows a file picker that lets a user select a single file, returning a handle for
+    the selected file. The selected file does not have to exist already. If the selected
+    file does not exist a new empty file is created before this method returns, otherwise
+    the existing file is cleared before this method returned.
+
+  : |handle| = await window . {{showSaveFilePicker()|showSaveFilePicker}}({ {{SaveFilePickerOptions/suggestedName}}: "README.md" })
+  :: Shows a file picker with the suggested "README.md" file name pre-filled as the default file name to save as.
+
+    Additional |options| can be passed to {{showSaveFilePicker()}} to indicate the types of files
+    the website wants the user to select and the directory in which the
+    file picker will open. See [[#api-filepickeroptions]] for details.
+</div>
+
+Advisement: The {{SaveFilePickerOptions/suggestedName}} option was first introduced in Chrome 91.
+
+<div algorithm>
+The <dfn method for=Window>showSaveFilePicker(|options|)</dfn> method, when invoked, must run
+these steps:
+
+1. Let |environment| be <b>[=this=]</b>'s [=relevant settings object=].
+
+1. Let |accepts options| be the result of [=process accept types|processing accept types=] given |options|.
+1. Let |starting directory| be the result of
+   [=determine the directory the picker will start in|determining the directory the picker will start in=]
+   given |options|["{{FilePickerOptions/id}}"],
+   |options|["{{FilePickerOptions/startIn}}"] and |environment|.
+
+1. Let |global| be |environment|'s [=environment settings object/global object=].
+1. Verify that |environment| [=is allowed to show a file picker=].
+
+1. Let |p| be [=a new promise=].
+1. Run the following steps [=in parallel=]:
+
+  1. Optionally, wait until any prior execution of this algorithm has terminated.
+
+  1. Display a prompt to the user requesting that the user pick exactly one file.
+     The displayed prompt should let the user pick one of the |accepts options| to filter the list of displayed files.
+     Exactly how this is implemented, and what this prompt looks like is [=implementation-defined=].
+     If |accepts options| are displayed in the UI, the selected option should also be used to suggest an extension
+     to append to a user provided file name, but this is not required. In particular user agents are free to ignore
+     potentially dangerous suffixes such as those ending in `".lnk"` or `".local"`.
+
+     When possible, this prompt should start out showing |starting directory|.
+
+     If |options|["{{SaveFilePickerOptions/suggestedName}}"] [=map/exists=] and
+     is not null, the file picker prompt will be pre-filled with the
+     |options|["{{SaveFilePickerOptions/suggestedName}}"] as the default name
+     to save as. The interaction between the
+     {{SaveFilePickerOptions/suggestedName}} and |accepts options| is [=implementation-defined=].
+     If the {{SaveFilePickerOptions/suggestedName}} is deemed too dangerous, user agents should ignore or sanitize the
+     suggested file name, similar to the sanitization done when fetching something <a spec=html>as a download</a>.
+
+     Note: A user agent could for example pick whichever option in |accepts options| that matches
+     {{SaveFilePickerOptions/suggestedName}} as the default filter.
+
+  1. Wait for the user to have made their selection.
+
+  1. If the user dismissed the prompt without making a selection,
+     [=/reject=] |p| with an "{{AbortError}}" {{DOMException}} and abort.
+
+  1. Let |entry| be a [=file entry=] representing the selected file.
+
+  1. If |entry| is deemed [=too sensitive or dangerous=] to be exposed to this website by the user agent:
+    1. Inform the user that the selected files or directories can't be exposed to this website.
+    1. At the discretion of the user agent,
+       either go back to the beginning of these [=in parallel=] steps,
+       or [=/reject=] |p| with an "{{AbortError}}" {{DOMException}} and abort.
+
+  1. Set |entry|'s [=binary data=] to an empty [=byte sequence=].
+
+  1. Set |result| to a new {{FileSystemFileHandle}} associated with |entry|.
+
+  1. [=Remember a picked directory=] given
+     |options|["{{FilePickerOptions/id}}"], |entry| and |environment|.
+
+  1. Perform the <a spec=html>activation notification</a> steps in |global|'s [=Window/browsing context=].
+
+     Note: This lets a website immediately perform operations on the returned handles that
+     might require user activation, such as requesting more permissions.
+
+  1. [=/Resolve=] |p| with |result|.
+
+1. Return |p|.
+
+</div>
+
+## The {{Window/showDirectoryPicker()}} method ## {#api-showdirectorypicker}
+
+<div class="note domintro">
+  : |handle| = await window . {{Window/showDirectoryPicker()}}
+  : |handle| = await window . {{Window/showDirectoryPicker()}}({ {{DirectoryPickerOptions/mode}}: 'read' })
+  :: Shows a directory picker that lets the user select a single directory, returning a handle for
+    the selected directory if the user grants read permission.
+
+  : |handle| = await window . {{Window/showDirectoryPicker()}}({ {{DirectoryPickerOptions/mode}}: 'readwrite' })
+  :: Shows a directory picker that lets the user select a single directory, returning a handle for
+    the selected directory. The user agent can combine read and write permission requests on this handle into
+    one subsequent prompt.
+
+  The {{DirectoryPickerOptions/id}} and {{DirectoryPickerOptions/startIn}} fields behave
+  identically to the {{FilePickerOptions/id}} and {{FilePickerOptions/startIn}} fields, respectively.
+  See [[#api-filepickeroptions-starting-directory]] for details on how to use these fields.
+</div>
+
+<div algorithm>
+The <dfn method for=Window>showDirectoryPicker(<var>options</var>)</dfn> method, when invoked, must run
+these steps:
+
+1. Let |environment| be <b>[=this=]</b>'s [=relevant settings object=].
+
+1. Let |starting directory| be the result of [=determine the directory the picker will start in|determining the directory the picker will start in=]
+   given |options|["{{DirectoryPickerOptions/id}}"],
+   |options|["{{DirectoryPickerOptions/startIn}}"] and |environment|.
+
+1. Let |global| be |environment|'s [=environment settings object/global object=].
+1. Verify that |environment| [=is allowed to show a file picker=].
+
+1. Let |p| be [=a new promise=].
+1. Run the following steps [=in parallel=]:
+
+  1. Optionally, wait until any prior execution of this algorithm has terminated.
+
+  1. Let |filePickerOptions| be an empty [=/map=].
+
+  1. Set |filePickerOptions|["multiple"] to false.
+
+  1. Let |dismissed| be the result of [=WebDriver BiDi file dialog opened=] with null and |filePickerOptions|.
+
+  1. If |dismissed| is false:
+
+    1. Display a prompt to the user requesting that the user pick a directory.
+
+       When possible, this prompt should start out showing |starting directory|.
+
+    1. Wait for the user to have made their selection.
+
+  1. If |dismissed| is true or if the user dismissed the prompt without making a selection,
+     [=/reject=] |p| with an "{{AbortError}}" {{DOMException}} and abort.
+
+  1. Let |entry| be a [=directory entry=] representing the selected directory.
+
+  1. If |entry| is deemed [=too sensitive or dangerous=] to be exposed to this website by the user agent:
+    1. Inform the user that the selected files or directories can't be exposed to this website.
+    1. At the discretion of the user agent,
+       either go back to the beginning of these [=in parallel=] steps,
+       or [=/reject=] |p| with an "{{AbortError}}" {{DOMException}} and abort.
+
+  1. Set |result| to a new {{FileSystemDirectoryHandle}} associated with |entry|.
+
+  1. [=Remember a picked directory=] given
+     |options|["{{DirectoryPickerOptions/id}}"], |entry| and |environment|.
+
+  1. Let |desc| be a {{FileSystemPermissionDescriptor}}.
+  1. Set |desc|["{{PermissionDescriptor/name}}"] to
+     "{{PermissionName/file-system}}".
+  1. Set |desc|["{{FileSystemPermissionDescriptor/handle}}"] to |result|.
+  1. Set |desc|["{{FileSystemPermissionDescriptor/mode}}"] to
+     |options|["{{DirectoryPickerOptions/mode}}"].
+  1. Let |status| be the result of running <a spec=permissions>create a PermissionStatus</a> for |desc|.
+
+  1. Perform the <a spec=html>activation notification</a> steps in |global|'s [=Window/browsing context=].
+
+  1. [=Request permission to use=] |desc|.
+  1. Run the [=default permission query algorithm=] on |desc| and |status|.
+  1. If |status| is not "{{PermissionState/granted}}",
+     [=/reject=] |result| with a "{{AbortError}}" {{DOMException}} and abort.
+
+  1. Perform the <a spec=html>activation notification</a> steps in |global|'s [=Window/browsing context=].
+
+  1. [=/Resolve=] |p| with |result|.
+
+1. Return |p|.
+
+</div>
+
+## Drag and Drop ## {#drag-and-drop}
+
+<xmp class=idl>
+partial interface DataTransferItem {
+    Promise<FileSystemHandle?> getAsFileSystemHandle();
+};
+</xmp>
+
+During a <em>drag-and-drop operation</em>, dragged file and
+directory items are associated with [=file entries=] and [=directory entries=]
+respectively.
+
+<div class="note domintro">
+  : |handle| = await item . {{getAsFileSystemHandle()}}
+  :: Returns a {{FileSystemFileHandle}} object if the dragged item is a file and a {{FileSystemDirectoryHandle}} object if the dragged item is a directory.
+</div>
+
+<div algorithm>
+
+The <dfn method for=DataTransferItem>getAsFileSystemHandle()</dfn> method steps are:
+
+1. If the {{DataTransferItem}} object is not in the <a spec=html>read/write
+    mode</a> or the <a spec=html>read-only mode</a>, return
+    [=a promise resolved with=] `null`.
+
+1. If the <a spec=html>the drag data item kind</a> is not <em>File</em>,
+    then return [=a promise resolved with=] `null`.
+
+1. Let |p| be [=a new promise=].
+
+1. Run the following steps [=in parallel=]:
+
+  1. Let |entry| be the [=/file system entry=] representing the dragged file or directory.
+
+  1. If |entry| is a [=file entry=]:
+
+    1. Let |handle| be a {{FileSystemFileHandle}} associated with |entry|.
+
+  1. Else if |entry| is a [=directory entry=]:
+
+    1. Let |handle| be a {{FileSystemDirectoryHandle}} associated with |entry|.
+
+  1. [=/Resolve=] |p| with |entry|.
+
+1. Return |p|.
+
+</div>
+
+<div class=example id=draganddrop-example>
+Handling drag and drop of files and directories:
+<xmp highlight=js>
+elem.addEventListener('dragover', (e) => {
+  // Prevent navigation.
+  e.preventDefault();
+});
+
+elem.addEventListener('drop', async (e) => {
+  e.preventDefault();
+
+  const fileHandlesPromises = [...e.dataTransfer.items]
+    .filter(item => item.kind === 'file')
+    .map(item => item.getAsFileSystemHandle());
+
+  for await (const handle of fileHandlesPromises) {
+    if (handle.kind === 'directory') {
+      console.log(`Directory: ${handle.name}`);
+    } else {
+      console.log(`File: ${handle.name}`);
+    }
+  }
+});
+</xmp>
+</div>
+
+Issue: This currently does not block access to [=too sensitive or dangerous=] directories, to
+be consistent with other APIs that give access to dropped files and directories. This is inconsistent
+with the [=local file system handle factories=] though, so we might want to reconsider this.
+
+# Accessibility Considerations # {#accessibility-considerations}
+
+*This section is non-normative.*
+
+When this specification is used to present information in the user interface,
+implementors will want to follow the OS level accessibility guidelines for the platform.
+
+
+# Privacy Considerations # {#privacy-considerations}
+
+*This section is non-normative.*
+
+This API does not give websites any more read access to data than the existing `<input type=file>`
+and `<input type=file webkitdirectory>` APIs already do. Furthermore similarly to those APIs, all
+access to files and directories is explicitly gated behind a file or directory picker.
+
+There are however several major privacy risks with this new API:
+
+## Users giving access to more, or more sensitive files than they intended. ## {#privacy-wide-access}
+
+This isn't a new risk with this API, but user agents should try to make sure that users are aware
+of what exactly they're giving websites access to. This is particularly important when giving
+access to a directory, where it might not be immediately clear to a user just how many files
+actually exist in that directory.
+
+A related risk is having a user give access to particularly sensitive data. This
+could include some of a user agent's configuration data, network cache or cookie store,
+or operating system configuration data such as password files. To protect against this, user agents
+are encouraged to restrict which directories a user is allowed to select in a directory picker,
+and potentially even restrict which files the user is allowed to select. This will make it much
+harder to accidentally give access to a directory that contains particularly sensitive data. Care
+must be taken to strike the right balance between restricting what the API can access while still
+having the API be useful. After all, this API intentionally lets the user use websites to interact
+with some of their most private personal data.
+
+Examples of directories that user agents might want to restrict as being
+<dfn>too sensitive or dangerous</dfn> include:
+
+* The directory or directories containing the user agent itself.
+* Directories where the user agent stores [=storage|website storage=].
+* Directories containing system files (such as `C:\Windows` on Windows).
+* Directories such as `/dev/`, `/sys`, and `/proc` on Linux that would give access to low-level devices.
+* A user's entire "home" directory.
+  Individual files and directories inside the home directory should still be allowed,
+  but user agents should not generally let users give blanket access to the entire directory.
+* The default directory for downloads, if the user agent has such a thing.
+  Individual files inside the directory again should be allowed, but the whole directory would risk leaking more data than a user realizes.
+* Files with names that end in `.lnk`, when selecting a file to write to. Writing to
+  these files on Windows is similar to creating symlinks on other operating systems,
+  and as such can be used to attempt to trick users into giving access to files they didn't intend to expose.
+* Files with names that end in `.local`, when selecting a file to write to.
+  Windows uses these files to decide what DLLs to load, and as such writing to
+  these files could be used to cause code to be executed.
+
+## Websites trying to use this API for tracking. ## {#privacy-tracking}
+
+This API could be used by websites to track the user across clearing browsing
+data. This is because, in contrast with existing file access APIs, user agents are
+able to grant persistent access to files or directories and can re-prompt. In
+combination with the ability to write to files, websites will be able to persist an
+identifier on the users' disk. Clearing browsing data will not affect those files
+in any way, making these identifiers persist through those actions.
+
+This risk is somewhat mitigated by the fact that clearing browsing data will clear all handles
+that a website had persisted (for example in IndexedDB),
+so websites won't have any handles to re-prompt for permission after browsing data was cleared.
+Furthermore user agents are encouraged to make it clear what files and directories a website has
+access to, and to automatically expire permission grants except for particularly well trusted
+origins (for example persistent permissions could be limited to "installed" web applications).
+
+User agents also are encouraged to provide a way for users to revoke permissions granted.
+Clearing browsing data is expected to revoke all permissions as well.
+
+## First-party vs third-party contexts. ## {#privacy-third-party}
+
+In third-party contexts (e.g. an iframe whose origin does not match that of the top-level frame)
+websites can't gain access to data they don't already have access to. This includes both getting
+access to new files or directories via the [=local file system handle factories=], as well as requesting
+more permissions to existing handles via the {{requestPermission}} API.
+
+Handles can also only be post-messaged to same-origin destinations. Attempts to send a handle to
+a cross-origin destination will result in a {{MessagePort/messageerror}} event.
+
+# Security Considerations # {#security-considerations}
+
+*This section is non-normative.*
+
+This API gives websites the ability to modify existing files on disk, as well as write to new
+files. This has a couple of important security considerations:
+
+## Malware ## {#security-malware}
+
+This API could be used by websites to try to store and/or execute malware on the users system.
+To mitigate this risk, this API does not provide any way to mark files as executable (on the other
+hand files that are already executable likely remain that way, even after the files are modified
+through this API). Furthermore user agents are encouraged to apply things like Mark-of-the-Web to
+files created or modified by this API.
+
+Finally, user agents are encouraged to verify the contents of files modified by this API via malware
+scans and safe browsing checks, unless some kind of external strong trust relation already exists.
+This of course has effects on the performance characteristics of this API.
+
+## Ransomware attacks ## {#security-ransomware}
+
+Another risk factor is that of ransomware attacks. The limitations described above regarding
+blocking access to certain sensitive directories helps limit the damage such an attack can do.
+Additionally user agents can grant write access to files at whatever granularity they deem
+appropriate.
+
+## Filling up a users disk ## {#filling-up-disk}
+
+Other than files in a [=/bucket file system=], files written by this API are not subject
+to [=storage quota=]. As such websites can fill up a users disk without being limited by
+quota, which could leave a users device in a bad state (do note that even with storage that is
+subject to [=storage quota=] it is still possible to fill up, or come close to filling up, a users
+disk, since [=storage quota=] in general is not dependent on the amount of available disk
+space).
+
+Without this API websites can write data to disk not subject to quota limitations already
+by triggering downloads of large files (potentially created client side, to not incur any network
+overhead). While the presence of {{FileSystemWritableFileStream/truncate()}} and writing at a
+potentially really large offset past the end of a file makes it much easier and lower cost to
+create large files, on most file systems such files should not actually take up as much disk space as
+most commonly used file systems support sparse files (and thus wouldn't actually store the NUL
+bytes generated by resizing a file or seeking past the end of it).
+
+Whatever mitigations user agents use to guard against websites filling up a disk via either
+quota managed storage or the existing downloads mechanism should also be employed when websites
+use this API to write to disk.
