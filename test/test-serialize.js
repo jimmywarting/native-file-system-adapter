@@ -5,7 +5,6 @@
  */
 
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
 import { getOriginPrivateDirectory, deserialize } from '../src/es6.js'
 import * as nodeAdapter from '../src/adapters/node.js'
 import * as memoryAdapter from '../src/adapters/memory.js'
@@ -38,6 +37,8 @@ const testDir = './tmp-test-serialize'
 if (!existsSync(testDir)) mkdirSync(testDir)
 
 const nodeRoot = await getOriginPrivateDirectory(nodeAdapter, testDir)
+
+try {
 
 await test('node: serialize() on a FileHandle returns a plain object with kind/name/path', async () => {
   const fh = await nodeRoot.getFileHandle('hello.txt', { create: true })
@@ -115,8 +116,19 @@ await test('node: isSameEntry() is true for original and deserialized directory 
   assert(await dh.isSameEntry(restored), 'original and deserialized dir handle should be isSameEntry')
 })
 
-// Cleanup node test dir
-rmSync(testDir, { recursive: true })
+await test('node: deserialize() accepts a dynamic import() Promise', async () => {
+  const fh = await nodeRoot.getFileHandle('dynamic-import.txt', { create: true })
+  const data = fh.serialize()
+  // Pass the Promise returned by import() directly, as a convenience shorthand
+  const restored = await deserialize(data, import('../src/adapters/node.js'))
+  assert(restored.kind === 'file', 'handle kind should be file')
+  assert(restored.name === 'dynamic-import.txt', 'handle name should match')
+})
+
+} finally {
+  // Cleanup node test dir even if tests fail
+  rmSync(testDir, { recursive: true })
+}
 
 // ---------------------------------------------------------------------------
 // Memory adapter tests
@@ -197,6 +209,23 @@ await test('memory: isSameEntry() is true for original and deserialized handle',
   const data = fh.serialize()
   const restored = await deserialize(data, memoryAdapter, rawMemRoot)
   assert(await fh.isSameEntry(restored), 'original and deserialized memory file handle should be isSameEntry')
+})
+
+await test('memory: writes to deserialized handle are visible through the original handle', async () => {
+  const fh = await sharedRoot.getFileHandle('write-through.txt', { create: true })
+  const data = fh.serialize()
+  const restored = await deserialize(data, memoryAdapter, rawMemRoot)
+
+  // Write via the deserialized (restored) handle
+  const writable = await restored.createWritable()
+  await writable.write('written via restored handle')
+  await writable.close()
+
+  // Read back via the original handle — both point at the same in-memory entry
+  const file = await fh.getFile()
+  const text = await file.text()
+  assert(text === 'written via restored handle',
+    `writes through deserialized handle should be visible via original handle, got: '${text}'`)
 })
 
 // ---------------------------------------------------------------------------

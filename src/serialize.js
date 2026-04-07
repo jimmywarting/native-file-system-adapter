@@ -30,13 +30,16 @@ import { FileSystemDirectoryHandle } from './FileSystemDirectoryHandle.js'
  *
  * @param {{ kind: 'file'|'directory', name: string, [key: string]: any }} data
  *   Serialized handle data produced by `handle.serialize()`.
- * @param {object} adapterModule
- *   The imported adapter module (not a Promise — await it first if needed).
+ * @param {object|Promise<object>} adapterModule
+ *   The imported adapter module, or a dynamic `import()` Promise that resolves
+ *   to one.  The module must export a `deserialize(data, ...args)` function.
  * @param {...any} args
  *   Additional arguments forwarded to the adapter's `deserialize` function.
  * @returns {Promise<FileSystemFileHandle|FileSystemDirectoryHandle>}
  */
 export async function deserialize (data, adapterModule, ...args) {
+  // Accept both a plain module object and a dynamic import() Promise so callers
+  // can write: deserialize(data, import('./adapters/node.js'))
   const mod = await adapterModule
   if (typeof mod.deserialize !== 'function') {
     throw new TypeError(

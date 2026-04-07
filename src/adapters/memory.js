@@ -418,7 +418,14 @@ export class FolderHandle {
  * @returns {Promise<FileHandle|FolderHandle>}
  */
 export async function deserialize (data, root) {
+  if (!data || typeof data.path !== 'string' || !data.kind || !data.name) {
+    throw new TypeError('Invalid serialized handle data.')
+  }
   const segments = data.path.split('/').filter(Boolean)
+  if (segments.length === 0) {
+    // Root directory itself was serialized.
+    return root
+  }
   const name = segments.pop()
   let current = root
   for (const segment of segments) {

@@ -398,6 +398,9 @@ export class FolderHandle {
  * @returns {FileHandle|FolderHandle}
  */
 export function deserialize (data) {
+  if (!data || typeof data.path !== 'string' || !data.kind || !data.name) {
+    throw new TypeError('Invalid serialized handle data.')
+  }
   if (data.kind === 'file') return new FileHandle(data.path, data.name)
   return new FolderHandle(data.path, data.name)
 }
