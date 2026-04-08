@@ -149,7 +149,7 @@ export class CowFileHandle {
     if (!this._overlayHandle) {
       // Perform the copy: read the base file and store it in the overlay.
       const baseFile = await this._base.getFile()
-      const copyFile = new File([baseFile], this._name, { lastModified: Date.now() })
+      const copyFile = new File([baseFile], this._name, { lastModified: baseFile.lastModified })
       const mem = new MemFileHandle(this._name, copyFile, true)
       this._overlayParent._entries[this._name] = mem
       this._overlayHandle = mem
@@ -455,8 +455,9 @@ export class CowFolderHandle {
     const { recursive = false } = options
 
     // Check if empty (base + overlay, excluding tombstones).
+    // We only need to know if at least one entry exists; return early on first hit.
     const hasChildren = await (async () => {
-      for await (const _ of this.entries()) return true // eslint-disable-line no-unreachable-loop
+      for await (const firstEntry of this.entries()) { return true } // eslint-disable-line no-unused-vars
       return false
     })()
 
@@ -495,8 +496,8 @@ export class CowFolderHandle {
    */
   async _baseHas (name) {
     if (!this._base) return false
-    try { await this._base.getFileHandle(name, { create: false }); return true } catch { /* */ }
-    try { await this._base.getDirectoryHandle(name, { create: false }); return true } catch { /* */ }
+    try { await this._base.getFileHandle(name, { create: false }); return true } catch { /* not a file */ }
+    try { await this._base.getDirectoryHandle(name, { create: false }); return true } catch { /* not a directory */ }
     return false
   }
 
@@ -507,7 +508,8 @@ export class CowFolderHandle {
    */
   async _baseHasFile (name) {
     if (!this._base) return false
-    try { await this._base.getFileHandle(name, { create: false }); return true } catch { return false }
+    try { await this._base.getFileHandle(name, { create: false }); return true } catch { /* not found */ }
+    return false
   }
 }
 
