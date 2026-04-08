@@ -1,53 +1,60 @@
 import { FileSystemFileHandle } from './FileSystemFileHandle.js'
 import { FileSystemDirectoryHandle } from './FileSystemDirectoryHandle.js'
+export { serialize } from './FileSystemHandle.js'
 
 /**
  * Reconstruct a `FileSystemFileHandle` or `FileSystemDirectoryHandle` from a
- * plain object that was previously produced by `handle.serialize()`.
+ * plain object that was previously produced by `serialize(handle)`.
  *
- * The `adapterModule` argument must be the same adapter module that was used
- * when the handle was originally created.  The module must export a
- * `deserialize(data, ...args)` function; adapters that do not support
- * deserialization will cause this function to throw.
+ * When the serialized object contains an `adapter` field (as all built-in
+ * adapters produce), the adapter module is imported automatically and no
+ * second argument is needed.  Passing an explicit `adapterModule` overrides
+ * the automatic import (useful in environments where dynamic import by URL
+ * is not available, or for testing).
  *
- * Extra arguments beyond `data` and `adapterModule` are forwarded to the
- * adapter's own `deserialize` implementation.  For example, the memory adapter
- * requires the root `FolderHandle` as a third argument so it can navigate the
- * in-memory tree.
+ * @example <caption>Node adapter — automatic (preferred)</caption>
+ * import { serialize, deserialize } from 'native-file-system-adapter'
  *
- * @example <caption>Node adapter</caption>
+ * const data = serialize(fileHandle)
+ * // later:
+ * const handle = await deserialize(data)
+ *
+ * @example <caption>Explicit module override</caption>
  * import { deserialize } from 'native-file-system-adapter'
  * import * as nodeAdapter from 'native-file-system-adapter/src/adapters/node.js'
  *
- * const handle = await deserialize(serializedData, nodeAdapter)
+ * const handle = await deserialize(data, nodeAdapter)
  *
- * @example <caption>Memory adapter (within-session)</caption>
- * import { deserialize } from 'native-file-system-adapter'
- * import * as memoryAdapter from 'native-file-system-adapter/src/adapters/memory.js'
- *
- * // `root` is the raw FolderHandle from which the tree was built.
- * const handle = await deserialize(serializedData, memoryAdapter, rawRootFolderHandle)
- *
- * @param {{ kind: 'file'|'directory', name: string, [key: string]: any }} data
- *   Serialized handle data produced by `handle.serialize()`.
- * @param {object|Promise<object>} adapterModule
- *   The imported adapter module, or a dynamic `import()` Promise that resolves
- *   to one.  The module must export a `deserialize(data, ...args)` function.
- * @param {...any} args
- *   Additional arguments forwarded to the adapter's `deserialize` function.
+ * @param {{ adapter?: string, kind: 'file'|'directory', name: string, [key: string]: any }} data
+ *   Serialized handle data produced by `serialize()`.
+ * @param {object|Promise<object>} [adapterModule]
+ *   Optional explicit adapter module (or a dynamic `import()` Promise).
+ *   When omitted, the module URL is read from `data.adapter`.
  * @returns {Promise<FileSystemFileHandle|FileSystemDirectoryHandle>}
  */
-export async function deserialize (data, adapterModule, ...args) {
-  // Accept both a plain module object and a dynamic import() Promise so callers
-  // can write: deserialize(data, import('./adapters/node.js'))
-  const mod = await adapterModule
-  if (typeof mod.deserialize !== 'function') {
+export async function deserialize (data, adapterModule) {
+  let mod
+
+  if (adapterModule !== undefined) {
+    // Accept both a plain module object and a dynamic import() Promise.
+    mod = await adapterModule
+  } else if (data && typeof data.adapter === 'string') {
+    // Extract module URL from "moduleUrl:ConstructorName" (use lastIndexOf so
+    // colons inside file:// or https:// URLs are not accidentally split on).
+    const lastColon = data.adapter.lastIndexOf(':')
+    const moduleUrl = data.adapter.slice(0, lastColon)
+    mod = await import(moduleUrl)
+  }
+
+  if (!mod || typeof mod.deserialize !== 'function') {
     throw new TypeError(
-      'The provided adapter module does not export a `deserialize` function ' +
-      'and therefore does not support handle deserialization.'
+      'Cannot deserialize: no `deserialize` function found. ' +
+      'Either the serialized data is missing an `adapter` field or the ' +
+      'adapter module does not export `deserialize`.'
     )
   }
-  const adapterHandle = await mod.deserialize(data, ...args)
+
+  const adapterHandle = await mod.deserialize(data)
   return data.kind === 'file'
     ? new FileSystemFileHandle(adapterHandle)
     : new FileSystemDirectoryHandle(adapterHandle)

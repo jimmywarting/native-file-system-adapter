@@ -6,21 +6,41 @@ const { File, Blob, DOMException } = config
 const { GONE, MISMATCH, MOD_ERR, SYNTAX, DISALLOWED, NO_MOD } = errors
 
 /**
- * Build a slash-separated path string by traversing the parent chain.
- * The root handle has an empty name and no parent, so the path starts
- * with '/' followed by each ancestor name, e.g. '/dir1/subdir/file.txt'.
+ * Recursively serialize a FolderHandle's subtree into a plain object whose
+ * File children are included verbatim (suitable for IndexedDB storage).
  *
- * @param {FileHandle|FolderHandle} handle
- * @returns {string}
+ * @param {FolderHandle} folder
+ * @returns {{ kind: 'directory', name: string, children: object }}
  */
-function getHandlePath (handle) {
-  const parts = []
-  let current = handle
-  while (current && current.name) {
-    parts.unshift(current.name)
-    current = current._parent
+function serializeTree (folder) {
+  const children = {}
+  for (const [name, entry] of Object.entries(folder._entries)) {
+    if (entry instanceof FileHandle) {
+      children[name] = { kind: 'file', name, file: entry._file }
+    } else {
+      children[name] = serializeTree(entry)
+    }
   }
-  return '/' + parts.join('/')
+  return { kind: 'directory', name: folder.name, children }
+}
+
+/**
+ * Recursively reconstruct a FolderHandle subtree from a plain object produced
+ * by `serializeTree()`.
+ *
+ * @param {{ kind: string, name: string, children?: object, file?: File }} node
+ * @param {FolderHandle|null} parent
+ * @returns {FileHandle|FolderHandle}
+ */
+function reconstructTree (node, parent) {
+  if (node.kind === 'file') {
+    return new FileHandle(node.name, node.file || new File([], node.name), true, parent)
+  }
+  const folder = new FolderHandle(node.name, true, parent)
+  for (const [name, child] of Object.entries(node.children || {})) {
+    folder._entries[name] = reconstructTree(child, folder)
+  }
+  return folder
 }
 
 export class Sink extends BlobSink {
@@ -274,7 +294,8 @@ export class FileHandle {
   }
 
   serialize () {
-    return { kind: this.kind, name: this.name, path: getHandlePath(this) }
+    if (this._deleted) throw new DOMException(...GONE)
+    return { adapter: `${import.meta.url}:FileHandle`, kind: this.kind, name: this.name, file: this._file }
   }
 }
 
@@ -403,38 +424,37 @@ export class FolderHandle {
   }
 
   serialize () {
-    return { kind: this.kind, name: this.name, path: getHandlePath(this) }
+    if (this._deleted) throw new DOMException(...GONE)
+    return {
+      adapter: `${import.meta.url}:FolderHandle`,
+      kind: this.kind,
+      name: this.name,
+      root: serializeTree(this)
+    }
   }
 }
 
 /**
- * Reconstruct a raw adapter handle from a previously serialized object by
- * navigating from a root FolderHandle.  Because the memory adapter stores
- * everything in memory, the root must be the same instance that was used when
- * the handle was created.
+ * Reconstruct a FileHandle or FolderHandle from data produced by a memory
+ * adapter `serialize()` call.  Because all data is embedded in the serialized
+ * object, no external root reference is needed.
  *
- * @param {{ kind: 'file'|'directory', name: string, path: string }} data
- * @param {FolderHandle} root - The root FolderHandle of the in-memory tree.
- * @returns {Promise<FileHandle|FolderHandle>}
+ * - A serialized FileHandle (`data.kind === 'file'`) is reconstructed from
+ *   `data.file` (the original File object).
+ * - A serialized FolderHandle (`data.kind === 'directory'`) is reconstructed
+ *   from `data.root`, the full subtree snapshot.
+ *
+ * @param {{ kind: 'file'|'directory', name: string, file?: File, root?: object }} data
+ * @returns {FileHandle|FolderHandle}
  */
-export async function deserialize (data, root) {
-  if (!data || typeof data.path !== 'string' || !data.kind || !data.name) {
+export function deserialize (data) {
+  if (!data || !data.kind || !data.name) {
     throw new TypeError('Invalid serialized handle data.')
   }
-  const segments = data.path.split('/').filter(Boolean)
-  if (segments.length === 0) {
-    // Root directory itself was serialized.
-    return root
-  }
-  const name = segments.pop()
-  let current = root
-  for (const segment of segments) {
-    current = await current.getDirectoryHandle(segment, { create: false })
-  }
   if (data.kind === 'file') {
-    return current.getFileHandle(name, { create: false })
+    return new FileHandle(data.name, data.file || new File([], data.name))
   }
-  return current.getDirectoryHandle(name, { create: false })
+  return reconstructTree(data.root || data, null)
 }
 
 export default () => new FolderHandle('')

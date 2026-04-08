@@ -243,7 +243,7 @@ export class FileHandle {
   }
 
   serialize () {
-    return { kind: this.kind, name: this.name, path: this._path }
+    return { adapter: `${import.meta.url}:FileHandle`, kind: this.kind, name: this.name, path: this._path }
   }
 }
 
@@ -387,7 +387,7 @@ export class FolderHandle {
   }
 
   serialize () {
-    return { kind: this.kind, name: this.name, path: this._path }
+    return { adapter: `${import.meta.url}:FolderHandle`, kind: this.kind, name: this.name, path: this._path }
   }
 }
 

@@ -88,28 +88,6 @@ class FileSystemHandle {
     ) return false
     return this[kAdapter].isSameEntry(other[kAdapter])
   }
-
-  /**
-   * Serialize this handle to a plain JSON-safe object that can be stored or
-   * transferred and later passed to the top-level `deserialize()` function to
-   * reconstruct an equivalent handle.
-   *
-   * The adapter backing this handle must implement a `serialize()` method;
-   * adapters that do not support serialization throw a `DOMException` with name
-   * `'NotSupportedError'`.
-   *
-   * @returns {{ kind: 'file'|'directory', name: string, [key: string]: any }}
-   */
-  serialize () {
-    const adapter = this[kAdapter]
-    if (typeof adapter.serialize !== 'function') {
-      throw new DOMException(
-        'The adapter backing this handle does not support serialization.',
-        'NotSupportedError'
-      )
-    }
-    return adapter.serialize()
-  }
 }
 
 Object.defineProperty(FileSystemHandle.prototype, Symbol.toStringTag, {
@@ -126,5 +104,34 @@ if (globalThis.FileSystemHandle) {
   }
 }
 
+/**
+ * Serialize a `FileSystemHandle` to a plain, JSON-safe object that can be
+ * stored (e.g. in localStorage or IndexedDB) or transferred and later passed
+ * to `getOriginPrivateDirectory(serialized)` to reconstruct an equivalent
+ * handle.
+ *
+ * This is an external polymorphic dispatch function rather than a prototype
+ * method — it dispatches to the adapter's own `serialize()` implementation.
+ * The returned object always includes an `adapter` field of the form
+ * `"<module-url>:<ConstructorName>"` that `getOriginPrivateDirectory` uses to
+ * identify and import the correct adapter when reconstructing.
+ *
+ * Adapters that do not implement `serialize()` cause this function to throw a
+ * `DOMException` with name `'NotSupportedError'`.
+ *
+ * @param {FileSystemHandle} handle
+ * @returns {{ adapter: string, kind: 'file'|'directory', name: string, [key: string]: any }}
+ */
+function serialize (handle) {
+  const adapter = handle[kAdapter]
+  if (!adapter || typeof adapter.serialize !== 'function') {
+    throw new DOMException(
+      'The adapter backing this handle does not support serialization.',
+      'NotSupportedError'
+    )
+  }
+  return adapter.serialize()
+}
+
 export default FileSystemHandle
-export { FileSystemHandle }
+export { FileSystemHandle, serialize, kAdapter }

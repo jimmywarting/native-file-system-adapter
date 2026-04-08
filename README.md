@@ -204,31 +204,40 @@ await writer.close()
 ### Serializable handles
 
 Any handle backed by an adapter that supports serialization can be converted to a
-plain JSON-safe object with `handle.serialize()` and later reconstructed with the
-top-level `deserialize()` helper.
+plain object with the top-level `serialize()` function.  The object can later be
+passed directly to `getOriginPrivateDirectory()` to reconstruct an equivalent handle
+(the preferred API), or to the lower-level `deserialize()` helper.
 
-#### Node adapter (persists across sessions)
+The serialized object always includes an `adapter` field encoding the adapter module
+URL and the constructor name (`"<moduleUrl>:<ConstructorName>"`), so that
+`getOriginPrivateDirectory` can import the correct adapter automatically.
 
 ```js
-import { getOriginPrivateDirectory, deserialize } from 'native-file-system-adapter'
+import { getOriginPrivateDirectory, serialize } from 'native-file-system-adapter'
 import * as nodeAdapter from 'native-file-system-adapter/src/adapters/node.js'
 
 // Obtain a handle the normal way
 const root = await getOriginPrivateDirectory(nodeAdapter, './data')
 const fileHandle = await root.getFileHandle('notes.txt', { create: true })
 
-// Serialize to a plain object (JSON-safe)
-const serialized = fileHandle.serialize()
-// { kind: 'file', name: 'notes.txt', path: '/absolute/path/data/notes.txt' }
+// Serialize — standalone function, does not patch the prototype
+const serialized = serialize(fileHandle)
+// {
+//   adapter: 'file:///path/to/adapters/node.js:FileHandle',
+//   kind: 'file',
+//   name: 'notes.txt',
+//   path: '/absolute/path/data/notes.txt'
+// }
 
 // Store it anywhere — localStorage, IndexedDB, a database, …
 localStorage.setItem('savedHandle', JSON.stringify(serialized))
 
 // ─── Later, in another session ────────────────────────────────────────────────
 
+// Pass the serialized object directly to getOriginPrivateDirectory — the adapter
+// is imported automatically using the `adapter` field.
 const data = JSON.parse(localStorage.getItem('savedHandle'))
-const restored = await deserialize(data, nodeAdapter)
-// restored is a fully functional FileSystemFileHandle
+const restored = await getOriginPrivateDirectory(data)
 const text = await (await restored.getFile()).text()
 ```
 
@@ -236,44 +245,65 @@ Directory handles work the same way:
 
 ```js
 const dirHandle = await root.getDirectoryHandle('docs', { create: true })
-const serialized = dirHandle.serialize()
-// { kind: 'directory', name: 'docs', path: '/absolute/path/data/docs' }
+const serialized = serialize(dirHandle)
 
-const restoredDir = await deserialize(serialized, nodeAdapter)
+const restoredDir = await getOriginPrivateDirectory(serialized)
 for await (const [name] of restoredDir) {
   console.log(name)
 }
 ```
 
-#### Memory adapter (within the same session only)
+#### Memory adapter — self-contained snapshots
 
-The memory adapter stores everything in RAM, so handles can only be
-deserialized within the same process/session that created them.  A reference
-to the raw root `FolderHandle` (the object returned by `memoryAdapter.default()`)
-must be passed as the third argument.
+The memory adapter includes the complete file/directory data in the serialized
+object, making it self-contained.  The serialized data can be stored in IndexedDB
+(which natively supports `File` objects) and used to reconstruct the tree in a new
+session:
 
 ```js
-import { getOriginPrivateDirectory, deserialize } from 'native-file-system-adapter'
+import { getOriginPrivateDirectory, serialize } from 'native-file-system-adapter'
 import * as memoryAdapter from 'native-file-system-adapter/src/adapters/memory.js'
-import { FileSystemDirectoryHandle } from 'native-file-system-adapter'
 
-// Create a shared raw root that both the wrapped handle and deserialize() use
-const rawRoot = memoryAdapter.default()
-const root = new FileSystemDirectoryHandle(rawRoot)
+const root = await getOriginPrivateDirectory(memoryAdapter)
+const fh = await root.getFileHandle('temp.txt', { create: true })
+const w = await fh.createWritable()
+await w.write('hello')
+await w.close()
 
-const fileHandle = await root.getFileHandle('temp.txt', { create: true })
-const writable = await fileHandle.createWritable()
-await writable.write('hello')
-await writable.close()
+// FolderHandle serializes the full subtree (including File objects)
+const snapshot = serialize(root)
+// {
+//   adapter: 'file:///path/to/adapters/memory.js:FolderHandle',
+//   kind: 'directory',
+//   name: '',
+//   root: { kind: 'directory', name: '', children: {
+//     'temp.txt': { kind: 'file', name: 'temp.txt', file: File }
+//   }}
+// }
 
-// Serialize
-const serialized = fileHandle.serialize()
-// { kind: 'file', name: 'temp.txt', path: '/temp.txt' }
+// Store in IndexedDB (supports File objects natively), then later:
+const restoredRoot = await getOriginPrivateDirectory(snapshot)
+```
 
-// Deserialize — pass rawRoot so the adapter can navigate the in-memory tree
-const restored = await deserialize(serialized, memoryAdapter, rawRoot)
-const text = await (await restored.getFile()).text()
-// → 'hello'
+#### Low-level `deserialize()` helper
+
+An explicit `deserialize()` is also available when you need more control, for
+example to override which adapter module is used:
+
+```js
+import { serialize, deserialize } from 'native-file-system-adapter'
+import * as nodeAdapter from 'native-file-system-adapter/src/adapters/node.js'
+
+const data = serialize(handle)
+
+// Automatic (reads adapter from data.adapter):
+const restored = await deserialize(data)
+
+// Explicit adapter override:
+const restored2 = await deserialize(data, nodeAdapter)
+
+// Dynamic import() is also accepted:
+const restored3 = await deserialize(data, import('./src/adapters/node.js'))
 ```
 
 #### Security note

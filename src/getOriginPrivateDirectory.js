@@ -21,12 +21,44 @@ if (globalThis.DataTransferItem && !DataTransferItem.prototype.getAsFileSystemHa
 
 /**
  * @param {object=} driver
- * @return {Promise<FileSystemDirectoryHandle>}
+ * @return {Promise<FileSystemDirectoryHandle|import('./FileSystemFileHandle.js').FileSystemFileHandle>}
  */
 async function getOriginPrivateDirectory (driver, options = {}) {
   if (!driver) {
     return globalThis.navigator?.storage?.getDirectory() || globalThis.getOriginPrivateDirectory()
   }
+
+  // Detect a serialized handle produced by serialize().
+  // Serialized objects always have an `adapter` string field of the form
+  // "<moduleUrl>:<ConstructorName>".  Adapter module objects (the other valid
+  // argument type) never have an `adapter` property.
+  if (typeof driver === 'object' && driver !== null && typeof driver.adapter === 'string') {
+    const [
+      { FileSystemDirectoryHandle },
+      { FileSystemFileHandle }
+    ] = await Promise.all([
+      import('./FileSystemDirectoryHandle.js'),
+      import('./FileSystemFileHandle.js')
+    ])
+
+    // Split on the LAST colon so that colons inside "file://" or "https://"
+    // URLs are not accidentally included in the constructor name.
+    const lastColon = driver.adapter.lastIndexOf(':')
+    const moduleUrl = driver.adapter.slice(0, lastColon)
+    const mod = await import(moduleUrl)
+
+    if (typeof mod.deserialize !== 'function') {
+      throw new TypeError(
+        `Adapter at "${moduleUrl}" does not export a 'deserialize' function.`
+      )
+    }
+
+    const adapterHandle = await mod.deserialize(driver)
+    return driver.kind === 'file'
+      ? new FileSystemFileHandle(adapterHandle)
+      : new FileSystemDirectoryHandle(adapterHandle)
+  }
+
   const {FileSystemDirectoryHandle} = await import('./FileSystemDirectoryHandle.js')
   const module = await driver
   const sandbox = await (module.default
