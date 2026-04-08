@@ -255,7 +255,9 @@ export class MemorySyncAdapter {
         this._fileHandle.name
       )
     }
-    this._fileHandle._openSyncHandles--
+    if (this._fileHandle._openSyncHandles > 0) {
+      this._fileHandle._openSyncHandles--
+    }
     this._bytes = null
   }
 }

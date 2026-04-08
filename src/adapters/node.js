@@ -39,10 +39,14 @@ export function clearLocks () {
 }
 
 /**
+ * Returns true if `map` contains a positive count for `path` or any
+ * ancestor/descendant path.
+ *
+ * @param {Map<string, number>} map
  * @param {string} path
  */
-function isLocked (path) {
-  for (const [lockedPath, count] of openWritables) {
+function hasLockIn (map, path) {
+  for (const [lockedPath, count] of map) {
     if (count > 0 && (lockedPath === path || lockedPath.startsWith(path + '/'))) {
       return true
     }
@@ -50,19 +54,19 @@ function isLocked (path) {
   return false
 }
 
+/** Returns true if there is an open writable on `path` or a descendant. */
+function isLocked (path) {
+  return hasLockIn(openWritables, path)
+}
+
 /**
  * Returns true if an open FileSystemSyncAccessHandle holds an exclusive lock
- * on `path` or any ancestor/descendant path.
+ * on `path` or any descendant path.
  *
  * @param {string} path
  */
 function hasSyncHandle (path) {
-  for (const [lockedPath, count] of openSyncHandles) {
-    if (count > 0 && (lockedPath === path || lockedPath.startsWith(path + '/'))) {
-      return true
-    }
-  }
-  return false
+  return hasLockIn(openSyncHandles, path)
 }
 
 export class Sink {
@@ -226,7 +230,12 @@ export class NodeSyncAdapter {
     } catch (_err) {
       // Ignore close errors.
     }
-    openSyncHandles.set(this._path, openSyncHandles.get(this._path) - 1)
+    const count = (openSyncHandles.get(this._path) || 1) - 1
+    if (count <= 0) {
+      openSyncHandles.delete(this._path)
+    } else {
+      openSyncHandles.set(this._path, count)
+    }
   }
 }
 
