@@ -5,6 +5,44 @@ import { BlobSink } from './blobsink.js'
 const { File, Blob, DOMException } = config
 const { GONE, MISMATCH, MOD_ERR, SYNTAX, DISALLOWED, NO_MOD } = errors
 
+/**
+ * Recursively serialize a FolderHandle's subtree into a plain object whose
+ * File children are included verbatim (suitable for IndexedDB storage).
+ *
+ * @param {FolderHandle} folder
+ * @returns {{ kind: 'directory', name: string, children: object }}
+ */
+function serializeTree (folder) {
+  const children = {}
+  for (const [name, entry] of Object.entries(folder._entries)) {
+    if (entry instanceof FileHandle) {
+      children[name] = { kind: 'file', name, file: entry._file }
+    } else {
+      children[name] = serializeTree(entry)
+    }
+  }
+  return { kind: 'directory', name: folder.name, children }
+}
+
+/**
+ * Recursively reconstruct a FolderHandle subtree from a plain object produced
+ * by `serializeTree()`.
+ *
+ * @param {{ kind: string, name: string, children?: object, file?: File }} node
+ * @param {FolderHandle|null} parent
+ * @returns {FileHandle|FolderHandle}
+ */
+function reconstructTree (node, parent) {
+  if (node.kind === 'file') {
+    return new FileHandle(node.name, node.file || new File([], node.name), true, parent)
+  }
+  const folder = new FolderHandle(node.name, true, parent)
+  for (const [name, child] of Object.entries(node.children || {})) {
+    folder._entries[name] = reconstructTree(child, folder)
+  }
+  return folder
+}
+
 export class Sink extends BlobSink {
 
   /**
@@ -254,6 +292,11 @@ export class FileHandle {
       delete this._parent._entries[name]
     }
   }
+
+  serialize () {
+    if (this._deleted) throw new DOMException(...GONE)
+    return { adapter: `${import.meta.url}:FileHandle`, kind: this.kind, name: this.name, file: this._file }
+  }
 }
 
 export class FolderHandle {
@@ -379,6 +422,39 @@ export class FolderHandle {
       delete this._parent._entries[name]
     }
   }
+
+  serialize () {
+    if (this._deleted) throw new DOMException(...GONE)
+    return {
+      adapter: `${import.meta.url}:FolderHandle`,
+      kind: this.kind,
+      name: this.name,
+      root: serializeTree(this)
+    }
+  }
+}
+
+/**
+ * Reconstruct a FileHandle or FolderHandle from data produced by a memory
+ * adapter `serialize()` call.  Because all data is embedded in the serialized
+ * object, no external root reference is needed.
+ *
+ * - A serialized FileHandle (`data.kind === 'file'`) is reconstructed from
+ *   `data.file` (the original File object).
+ * - A serialized FolderHandle (`data.kind === 'directory'`) is reconstructed
+ *   from `data.root`, the full subtree snapshot.
+ *
+ * @param {{ kind: 'file'|'directory', name: string, file?: File, root?: object }} data
+ * @returns {FileHandle|FolderHandle}
+ */
+export function deserialize (data) {
+  if (!data || !data.kind || !data.name) {
+    throw new TypeError('Invalid serialized handle data.')
+  }
+  if (data.kind === 'file') {
+    return new FileHandle(data.name, data.file || new File([], data.name))
+  }
+  return reconstructTree(data.root || data, null)
 }
 
 export default () => new FolderHandle('')

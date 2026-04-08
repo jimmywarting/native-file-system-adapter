@@ -7,12 +7,14 @@ import FileSystemWritableFileStream from './FileSystemWritableFileStream.js'
 import FileSystemDirectoryHandle from './FileSystemDirectoryHandle.js'
 import FileSystemFileHandle from './FileSystemFileHandle.js'
 import FileSystemHandle from './FileSystemHandle.js'
+import { serialize } from './serialize.js'
 
 export {
   FileSystemDirectoryHandle,
   FileSystemFileHandle,
   FileSystemHandle,
   FileSystemWritableFileStream,
+  serialize,
   getOriginPrivateDirectory,
   showDirectoryPicker,
   showOpenFilePicker,

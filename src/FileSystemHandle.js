@@ -104,5 +104,38 @@ if (globalThis.FileSystemHandle) {
   }
 }
 
+/**
+ * Serialize a `FileSystemHandle` to a plain, JSON-safe object that can be
+ * stored (e.g. in localStorage or IndexedDB) or transferred and later passed
+ * to `getOriginPrivateDirectory(serialized)` to reconstruct an equivalent
+ * handle.
+ *
+ * This is an external polymorphic dispatch function rather than a prototype
+ * method — it dispatches to the adapter's own `serialize()` implementation.
+ * The returned object always includes an `adapter` field of the form
+ * `"<module-url>:<ConstructorName>"` that `getOriginPrivateDirectory` uses to
+ * identify and import the correct adapter when reconstructing.
+ *
+ * Adapters that do not implement `serialize()` cause this function to throw a
+ * `DOMException` with name `'NotSupportedError'`.
+ *
+ * @param {FileSystemHandle} handle
+ * @returns {{ adapter: string, kind: 'file'|'directory', name: string, [key: string]: any }}
+ */
+function serialize (handle) {
+  // Native (non-polyfill) handles have no polyfill adapter — return as-is.
+  if (globalThis.FileSystemHandle && handle instanceof globalThis.FileSystemHandle) {
+    return handle
+  }
+  const adapter = handle[kAdapter]
+  if (!adapter || typeof adapter.serialize !== 'function') {
+    throw new DOMException(
+      'The adapter backing this handle does not support serialization.',
+      'NotSupportedError'
+    )
+  }
+  return adapter.serialize()
+}
+
 export default FileSystemHandle
-export { FileSystemHandle }
+export { FileSystemHandle, serialize, kAdapter }

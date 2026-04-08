@@ -201,6 +201,102 @@ await writer.write(blob)
 await writer.close()
 ```
 
+### Serializable handles
+
+Any handle backed by an adapter that supports serialization can be converted to a
+plain object with the top-level `serialize()` function.  The object can later be
+passed directly to `getOriginPrivateDirectory()` to reconstruct an equivalent handle.
+
+The serialized object always includes an `adapter` field encoding the adapter module
+URL and the constructor name (`"<moduleUrl>:<ConstructorName>"`), so that
+`getOriginPrivateDirectory` can import the correct adapter automatically.
+
+If `serialize()` is called with a **native** (non-polyfilled) `FileSystemHandle` —
+e.g. one obtained from the browser's own `showOpenFilePicker()` — it returns the
+handle object as-is.  Likewise, passing a native handle directly to
+`getOriginPrivateDirectory()` returns it unchanged, so code that works with either
+native or polyfill handles does not need special-casing.
+
+```js
+import { getOriginPrivateDirectory, serialize } from 'native-file-system-adapter'
+import * as nodeAdapter from 'native-file-system-adapter/src/adapters/node.js'
+
+// Obtain a handle the normal way
+const root = await getOriginPrivateDirectory(nodeAdapter, './data')
+const fileHandle = await root.getFileHandle('notes.txt', { create: true })
+
+// Serialize — standalone function, does not patch the prototype
+const serialized = serialize(fileHandle)
+// {
+//   adapter: 'file:///path/to/adapters/node.js:FileHandle',
+//   kind: 'file',
+//   name: 'notes.txt',
+//   path: '/absolute/path/data/notes.txt'
+// }
+
+// Store it anywhere — localStorage, IndexedDB, a database, …
+localStorage.setItem('savedHandle', JSON.stringify(serialized))
+
+// ─── Later, in another session ────────────────────────────────────────────────
+
+// Pass the serialized object directly to getOriginPrivateDirectory — the adapter
+// is imported automatically using the `adapter` field.
+const data = JSON.parse(localStorage.getItem('savedHandle'))
+const restored = await getOriginPrivateDirectory(data)
+const text = await (await restored.getFile()).text()
+```
+
+Directory handles work the same way:
+
+```js
+const dirHandle = await root.getDirectoryHandle('docs', { create: true })
+const serialized = serialize(dirHandle)
+
+const restoredDir = await getOriginPrivateDirectory(serialized)
+for await (const [name] of restoredDir) {
+  console.log(name)
+}
+```
+
+#### Memory adapter — self-contained snapshots
+
+The memory adapter includes the complete file/directory data in the serialized
+object, making it self-contained.  The serialized data can be stored in IndexedDB
+(which natively supports `File` objects) and used to reconstruct the tree in a new
+session:
+
+```js
+import { getOriginPrivateDirectory, serialize } from 'native-file-system-adapter'
+import * as memoryAdapter from 'native-file-system-adapter/src/adapters/memory.js'
+
+const root = await getOriginPrivateDirectory(memoryAdapter)
+const fh = await root.getFileHandle('temp.txt', { create: true })
+const w = await fh.createWritable()
+await w.write('hello')
+await w.close()
+
+// FolderHandle serializes the full subtree (including File objects)
+const snapshot = serialize(root)
+// {
+//   adapter: 'file:///path/to/adapters/memory.js:FolderHandle',
+//   kind: 'directory',
+//   name: '',
+//   root: { kind: 'directory', name: '', children: {
+//     'temp.txt': { kind: 'file', name: 'temp.txt', file: File }
+//   }}
+// }
+
+// Store in IndexedDB (supports File objects natively), then later:
+const restoredRoot = await getOriginPrivateDirectory(snapshot)
+```
+
+#### Security note
+
+The serialized object may expose absolute file-system paths.  This is
+intentional — this library is primarily used as a server-side or polyfill
+utility where path privacy is not a concern.  Do not expose serialized handles
+to untrusted clients.
+
 ## Supported browsers
 
 When importing as an ES module, browsers that support [dynamic imports](https://caniuse.com/es6-module-dynamic-import) and ES2018 features are a minimum requirement. When using a bundler, this restriction is no longer applicable.
@@ -212,7 +308,6 @@ For drag and drop, the `getAsFileSystemHandle()` polyfill depends on the `File a
 
 ## Limitations
 
-- Storing a file handle in IndexedDB or sharing it with postMessage isn't currently possible unless you use native.
 - `showDirectoryPicker` and `showOpenFilePicker` will not throw any `AbortError`s (e.g. user cancellations) when using a fallback input element
 - `showSaveFilePicker` may not actually show any prompt when using a fallback with `<a download>`
 - Cache adapter only works in secure (HTTPS) contexts `window.isSecureContext === true`

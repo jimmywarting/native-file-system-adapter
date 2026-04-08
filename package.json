@@ -12,6 +12,7 @@
     "test": "npm run test:wpt-node",
     "test:browser": "php -S localhost:4444 & open http://localhost:4444/example/test.html",
     "test:node": "node test/test-node.js",
+    "test:serialize": "node test/test-serialize.js",
     "test:deno": "deno run --allow-read --allow-write --allow-net test/test-deno.js",
     "test:wpt-in-deno": "deno run --allow-read --allow-write --allow-net test/test-wpt-in-deno.js",
     "test:wpt-node": "node test/wpt-node.js",
