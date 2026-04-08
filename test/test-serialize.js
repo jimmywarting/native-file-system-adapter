@@ -246,6 +246,42 @@ await test('memory: getOriginPrivateDirectory(serialized) reconstructs a FolderH
 })
 
 // ---------------------------------------------------------------------------
+// Native handle pass-through tests (mocked globalThis.FileSystemHandle)
+// ---------------------------------------------------------------------------
+
+await test('serialize() returns a native handle as-is', async () => {
+  class MockNativeHandle {}
+  const nativeHandle = new MockNativeHandle()
+  nativeHandle.kind = 'file'
+  nativeHandle.name = 'native.txt'
+
+  const origNative = globalThis.FileSystemHandle
+  globalThis.FileSystemHandle = MockNativeHandle
+  try {
+    const result = serialize(nativeHandle)
+    assert(result === nativeHandle, 'serialize() should return the native handle unchanged')
+  } finally {
+    globalThis.FileSystemHandle = origNative
+  }
+})
+
+await test('getOriginPrivateDirectory() returns a native handle as-is', async () => {
+  class MockNativeHandle {}
+  const nativeHandle = new MockNativeHandle()
+  nativeHandle.kind = 'directory'
+  nativeHandle.name = ''
+
+  const origNative = globalThis.FileSystemHandle
+  globalThis.FileSystemHandle = MockNativeHandle
+  try {
+    const result = await getOriginPrivateDirectory(nativeHandle)
+    assert(result === nativeHandle, 'getOriginPrivateDirectory() should return the native handle unchanged')
+  } finally {
+    globalThis.FileSystemHandle = origNative
+  }
+})
+
+// ---------------------------------------------------------------------------
 // Error cases
 // ---------------------------------------------------------------------------
 

@@ -28,6 +28,11 @@ async function getOriginPrivateDirectory (driver, options = {}) {
     return globalThis.navigator?.storage?.getDirectory() || globalThis.getOriginPrivateDirectory()
   }
 
+  // Native (non-polyfill) FileSystemHandle passed directly — return as-is.
+  if (globalThis.FileSystemHandle && driver instanceof globalThis.FileSystemHandle) {
+    return driver
+  }
+
   // Detect a serialized handle produced by serialize().
   // Serialized objects always have an `adapter` string field of the form
   // "<moduleUrl>:<ConstructorName>".  Adapter module objects (the other valid

@@ -211,6 +211,12 @@ The serialized object always includes an `adapter` field encoding the adapter mo
 URL and the constructor name (`"<moduleUrl>:<ConstructorName>"`), so that
 `getOriginPrivateDirectory` can import the correct adapter automatically.
 
+If `serialize()` is called with a **native** (non-polyfilled) `FileSystemHandle` —
+e.g. one obtained from the browser's own `showOpenFilePicker()` — it returns the
+handle object as-is.  Likewise, passing a native handle directly to
+`getOriginPrivateDirectory()` returns it unchanged, so code that works with either
+native or polyfill handles does not need special-casing.
+
 ```js
 import { getOriginPrivateDirectory, serialize } from 'native-file-system-adapter'
 import * as nodeAdapter from 'native-file-system-adapter/src/adapters/node.js'

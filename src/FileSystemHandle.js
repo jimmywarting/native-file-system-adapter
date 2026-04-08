@@ -123,6 +123,10 @@ if (globalThis.FileSystemHandle) {
  * @returns {{ adapter: string, kind: 'file'|'directory', name: string, [key: string]: any }}
  */
 function serialize (handle) {
+  // Native (non-polyfill) handles have no polyfill adapter — return as-is.
+  if (globalThis.FileSystemHandle && handle instanceof globalThis.FileSystemHandle) {
+    return handle
+  }
   const adapter = handle[kAdapter]
   if (!adapter || typeof adapter.serialize !== 'function') {
     throw new DOMException(
