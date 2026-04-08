@@ -1,5 +1,6 @@
 import { openAsBlob } from 'node:fs'
 import fs from 'node:fs/promises'
+import { readSync, writeSync, ftruncateSync, fsyncSync, closeSync, fstatSync, openSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { createHash } from 'node:crypto'
 import { errors } from '../util.js'
@@ -29,21 +30,43 @@ function pathToUUID (kind, path) {
 }
 
 const openWritables = new Map()
+/** Tracks the number of open FileSystemSyncAccessHandles per path. */
+const openSyncHandles = new Map()
 
 export function clearLocks () {
   openWritables.clear()
+  openSyncHandles.clear()
 }
 
 /**
+ * Returns true if `map` contains a positive count for `path` or any
+ * ancestor/descendant path.
+ *
+ * @param {Map<string, number>} map
  * @param {string} path
  */
-function isLocked (path) {
-  for (const [lockedPath, count] of openWritables) {
+function hasLockIn (map, path) {
+  for (const [lockedPath, count] of map) {
     if (count > 0 && (lockedPath === path || lockedPath.startsWith(path + '/'))) {
       return true
     }
   }
   return false
+}
+
+/** Returns true if there is an open writable on `path` or a descendant. */
+function isLocked (path) {
+  return hasLockIn(openWritables, path)
+}
+
+/**
+ * Returns true if an open FileSystemSyncAccessHandle holds an exclusive lock
+ * on `path` or any descendant path.
+ *
+ * @param {string} path
+ */
+function hasSyncHandle (path) {
+  return hasLockIn(openSyncHandles, path)
 }
 
 export class Sink {
@@ -130,6 +153,92 @@ export class Sink {
   }
 }
 
+/**
+ * Synchronous adapter for the Node.js file system adapter.
+ *
+ * Uses a synchronous file descriptor opened with `openSync` so that all
+ * read/write/truncate/flush/close operations can be performed without Promises.
+ */
+export class NodeSyncAdapter {
+  /**
+   * @param {number} fd    Synchronous file descriptor (from `openSync`).
+   * @param {string} path  Absolute path of the file, used for lock tracking.
+   */
+  constructor (fd, path) {
+    this._fd = fd
+    this._path = path
+    // Track this sync access handle in openSyncHandles (exclusive lock).
+    openSyncHandles.set(path, (openSyncHandles.get(path) || 0) + 1)
+  }
+
+  /**
+   * @param {Uint8Array} buffer
+   * @param {number} at
+   * @returns {number}
+   */
+  read (buffer, at) {
+    try {
+      return readSync(this._fd, buffer, 0, buffer.length, at)
+    } catch (err) {
+      if (err.code === 'ENOENT') throw new DOMException(...GONE)
+      throw err
+    }
+  }
+
+  /**
+   * @param {Uint8Array} buffer
+   * @param {number} at
+   * @returns {number}
+   */
+  write (buffer, at) {
+    try {
+      writeSync(this._fd, buffer, 0, buffer.length, at)
+      return buffer.length
+    } catch (err) {
+      if (err.code === 'ENOENT') throw new DOMException(...GONE)
+      throw err
+    }
+  }
+
+  /** @param {number} newSize */
+  truncate (newSize) {
+    try {
+      ftruncateSync(this._fd, newSize)
+    } catch (err) {
+      if (err.code === 'ENOENT') throw new DOMException(...GONE)
+      throw err
+    }
+  }
+
+  /** @returns {number} */
+  getSize () {
+    return fstatSync(this._fd).size
+  }
+
+  flush () {
+    try {
+      fsyncSync(this._fd)
+    } catch (err) {
+      if (err.code === 'ENOENT') throw new DOMException(...GONE)
+      throw err
+    }
+  }
+
+  close () {
+    try {
+      closeSync(this._fd)
+    } catch (_err) {
+      // Ignore close errors.
+    }
+    const count = (openSyncHandles.get(this._path) || 1) - 1
+    if (count <= 0) {
+      openSyncHandles.delete(this._path)
+    } else {
+      openSyncHandles.set(this._path, count)
+    }
+  }
+}
+
 export class FileHandle {
 
   /**
@@ -170,6 +279,9 @@ export class FileHandle {
   async createWritable (opts) {
     const mode = opts.mode
 
+    // A sync access handle holds an exclusive lock — block all new writables.
+    if (hasSyncHandle(this._path)) throw new DOMException(...NO_MOD)
+
     // Exclusive modes allow only one writer at a time.
     if (mode === 'exclusive-atomic' || mode === 'exclusive-in-place') {
       if (isLocked(this._path)) throw new DOMException(...NO_MOD)
@@ -205,9 +317,33 @@ export class FileHandle {
     return new Sink(fileHandle, size, dirname(this._path), this._path, tempPath)
   }
 
+  /**
+   * Obtain a synchronous access handle with an exclusive lock on the file.
+   *
+   * @returns {Promise<NodeSyncAdapter>}
+   */
+  async createSyncAccessHandle () {
+    if (isLocked(this._path) || hasSyncHandle(this._path)) {
+      throw new DOMException(...NO_MOD)
+    }
+    // Ensure the file exists before opening it synchronously.
+    await fs.stat(this._path).catch(err => {
+      if (err.code === 'ENOENT') throw new DOMException(...GONE)
+      throw err
+    })
+    let fd
+    try {
+      fd = openSync(this._path, 'r+')
+    } catch (err) {
+      if (err.code === 'ENOENT') throw new DOMException(...GONE)
+      throw err
+    }
+    return new NodeSyncAdapter(fd, this._path)
+  }
+
   async move (dest, newName) {
     if (newName === '') throw new TypeError('Name cannot be empty.')
-    if (isLocked(this._path)) throw new DOMException(...NO_MOD)
+    if (isLocked(this._path) || hasSyncHandle(this._path)) throw new DOMException(...NO_MOD)
     const name = newName || this.name
     const destPath = dest ? dest._path : dirname(this._path)
     const newPath = join(destPath, name)
@@ -223,7 +359,7 @@ export class FileHandle {
       throw new DOMException(...MOD_ERR)
     }
 
-    if (isLocked(newPath)) throw new DOMException(...NO_MOD)
+    if (isLocked(newPath) || hasSyncHandle(newPath)) throw new DOMException(...NO_MOD)
 
     await fs.rename(this._path, newPath).catch(err => {
       if (err.code === 'ENOENT') throw new DOMException(...GONE)
@@ -235,7 +371,7 @@ export class FileHandle {
   }
 
   async remove () {
-    if (isLocked(this._path)) throw new DOMException(...NO_MOD)
+    if (isLocked(this._path) || hasSyncHandle(this._path)) throw new DOMException(...NO_MOD)
     await fs.unlink(this._path).catch(err => {
       if (err.code === 'ENOENT') throw new DOMException(...GONE)
       throw err
