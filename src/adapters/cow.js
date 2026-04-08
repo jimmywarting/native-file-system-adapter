@@ -158,6 +158,8 @@ export class CowFileHandle {
 
       if (opts.keepExistingData) {
         // Copy base content into the overlay file before handing it to the caller.
+        // copySink is the adapter-level Sink whose write(blob, position) API
+        // takes a raw Blob and a byte offset — not a WriteParams object.
         const baseFile = await this._base.getFile()
         const copySink = await overlayFile.createWritable({ keepExistingData: false })
         await copySink.write(baseFile, 0)
@@ -500,7 +502,7 @@ export class CowFolderHandle {
     // Check if empty (base + overlay, excluding tombstones).
     // We only need to know if at least one entry exists; return early on first hit.
     const hasChildren = await (async () => {
-      for await (const firstEntry of this.entries()) { return true } // eslint-disable-line no-unused-vars
+      for await (const _ of this.entries()) { return true } // eslint-disable-line no-unreachable-loop
       return false
     })()
 
