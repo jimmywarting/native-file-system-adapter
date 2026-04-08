@@ -205,8 +205,7 @@ await writer.close()
 
 Any handle backed by an adapter that supports serialization can be converted to a
 plain object with the top-level `serialize()` function.  The object can later be
-passed directly to `getOriginPrivateDirectory()` to reconstruct an equivalent handle
-(the preferred API), or to the lower-level `deserialize()` helper.
+passed directly to `getOriginPrivateDirectory()` to reconstruct an equivalent handle.
 
 The serialized object always includes an `adapter` field encoding the adapter module
 URL and the constructor name (`"<moduleUrl>:<ConstructorName>"`), so that
@@ -283,27 +282,6 @@ const snapshot = serialize(root)
 
 // Store in IndexedDB (supports File objects natively), then later:
 const restoredRoot = await getOriginPrivateDirectory(snapshot)
-```
-
-#### Low-level `deserialize()` helper
-
-An explicit `deserialize()` is also available when you need more control, for
-example to override which adapter module is used:
-
-```js
-import { serialize, deserialize } from 'native-file-system-adapter'
-import * as nodeAdapter from 'native-file-system-adapter/src/adapters/node.js'
-
-const data = serialize(handle)
-
-// Automatic (reads adapter from data.adapter):
-const restored = await deserialize(data)
-
-// Explicit adapter override:
-const restored2 = await deserialize(data, nodeAdapter)
-
-// Dynamic import() is also accepted:
-const restored3 = await deserialize(data, import('./src/adapters/node.js'))
 ```
 
 #### Security note

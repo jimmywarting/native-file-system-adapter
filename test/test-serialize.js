@@ -5,7 +5,7 @@
  */
 
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
-import { getOriginPrivateDirectory, serialize, deserialize } from '../src/es6.js'
+import { getOriginPrivateDirectory, serialize } from '../src/es6.js'
 import * as nodeAdapter from '../src/adapters/node.js'
 import * as memoryAdapter from '../src/adapters/memory.js'
 import { FileSystemDirectoryHandle } from '../src/FileSystemDirectoryHandle.js'
@@ -76,14 +76,14 @@ await test('node: serialize() output is JSON-round-trippable', async () => {
   assert(parsed.adapter === data.adapter, 'adapter survives JSON round-trip')
 })
 
-await test('node: deserialize() reconstructs a FileHandle (explicit adapter)', async () => {
+await test('node: getOriginPrivateDirectory(serialized) reconstructs a FileHandle (round-trip read)', async () => {
   const fh = await nodeRoot.getFileHandle('deser-file.txt', { create: true })
   const writable = await fh.createWritable()
   await writable.write('hello from serialize test')
   await writable.close()
 
   const data = serialize(fh)
-  const restored = await deserialize(data, nodeAdapter)
+  const restored = await getOriginPrivateDirectory(data)
 
   assert(restored.kind === 'file', `restored handle should have kind 'file'`)
   assert(restored.name === 'deser-file.txt', `restored handle should have correct name`)
@@ -124,10 +124,10 @@ await test('node: getOriginPrivateDirectory(serialized) reconstructs a FolderHan
   assert(entries.includes('child.txt'), `deserialized dir should list 'child.txt'`)
 })
 
-await test('node: deserialize() without explicit adapter uses data.adapter URL', async () => {
+await test('node: getOriginPrivateDirectory(serialized) reconstructs using auto-detected adapter', async () => {
   const fh = await nodeRoot.getFileHandle('auto-adapter.txt', { create: true })
   const data = serialize(fh)
-  const restored = await deserialize(data)
+  const restored = await getOriginPrivateDirectory(data)
   assert(restored.kind === 'file', 'should restore as file handle')
   assert(restored.name === 'auto-adapter.txt', 'should have correct name')
 })
@@ -198,7 +198,7 @@ await test('memory: deserialize() reconstructs a FileHandle (no root arg needed)
   await writable.close()
 
   const data = serialize(fh)
-  const restored = await deserialize(data)
+  const restored = await getOriginPrivateDirectory(data)
 
   assert(restored.kind === 'file', `restored handle should have kind 'file'`)
   assert(restored.name === 'to-restore.txt', `restored handle should have correct name`)
@@ -216,7 +216,7 @@ await test('memory: deserialize() reconstructs a FolderHandle with full subtree'
   await writable.close()
 
   const data = serialize(dh)
-  const restored = await deserialize(data)
+  const restored = await getOriginPrivateDirectory(data)
 
   assert(restored.kind === 'directory', `restored should have kind 'directory'`)
   assert(restored.name === 'restore-dir', `restored should have correct name`)
@@ -268,17 +268,6 @@ await test('serialize() throws NotSupportedError for adapters without serialize(
     threw = true
     assert(err instanceof DOMException, 'should throw DOMException')
     assert(err.name === 'NotSupportedError', `should throw NotSupportedError, got '${err.name}'`)
-  }
-  assert(threw, 'should have thrown')
-})
-
-await test('deserialize() throws TypeError when no adapter info available', async () => {
-  let threw = false
-  try {
-    await deserialize({ kind: 'file', name: 'x.txt' })
-  } catch (err) {
-    threw = true
-    assert(err instanceof TypeError, 'should throw TypeError')
   }
   assert(threw, 'should have thrown')
 })
