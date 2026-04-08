@@ -170,6 +170,96 @@ export class InPlaceSink {
   }
 }
 
+/**
+ * Synchronous adapter for the in-memory FileHandle.
+ *
+ * On construction it receives a `Uint8Array` copy of the file's current
+ * content.  All read/write/truncate operations work on that copy in memory.
+ * `flush()` and `close()` write the copy back to the owning `FileHandle`.
+ */
+export class MemorySyncAdapter {
+  /**
+   * @param {FileHandle} fileHandle
+   * @param {Uint8Array} bytes  Current file content copied into a mutable buffer.
+   */
+  constructor (fileHandle, bytes) {
+    this._fileHandle = fileHandle
+    this._bytes = bytes
+    this._size = bytes.length
+  }
+
+  /**
+   * @param {Uint8Array} buffer  Destination to fill.
+   * @param {number} at  Byte offset to start reading from.
+   * @returns {number}  Bytes actually read.
+   */
+  read (buffer, at) {
+    if (at >= this._size) return 0
+    const readEnd = Math.min(at + buffer.length, this._size)
+    const bytesRead = readEnd - at
+    buffer.set(this._bytes.subarray(at, readEnd))
+    return bytesRead
+  }
+
+  /**
+   * @param {Uint8Array} buffer  Source bytes to write.
+   * @param {number} at  Byte offset to start writing at.
+   * @returns {number}  Bytes written (always `buffer.length`).
+   */
+  write (buffer, at) {
+    const end = at + buffer.length
+    if (end > this._size) {
+      // Grow internal buffer, zero-filling the gap between old size and `at`.
+      const grown = new Uint8Array(end)
+      grown.set(this._bytes.subarray(0, this._size))
+      this._bytes = grown
+      this._size = end
+    }
+    this._bytes.set(buffer, at)
+    return buffer.length
+  }
+
+  /** @param {number} newSize */
+  truncate (newSize) {
+    if (newSize < this._size) {
+      const shrunk = new Uint8Array(newSize)
+      shrunk.set(this._bytes.subarray(0, newSize))
+      this._bytes = shrunk
+    } else if (newSize > this._size) {
+      const grown = new Uint8Array(newSize)
+      grown.set(this._bytes)
+      this._bytes = grown
+    }
+    this._size = newSize
+  }
+
+  /** @returns {number} */
+  getSize () {
+    return this._size
+  }
+
+  /** Persist the current buffer back to the owning FileHandle's backing File. */
+  flush () {
+    if (this._fileHandle._deleted) throw new DOMException(...GONE)
+    this._fileHandle._file = new File(
+      [this._bytes.subarray(0, this._size)],
+      this._fileHandle.name
+    )
+  }
+
+  /** Flush and release the exclusive lock. */
+  close () {
+    if (!this._fileHandle._deleted) {
+      this._fileHandle._file = new File(
+        [this._bytes.subarray(0, this._size)],
+        this._fileHandle.name
+      )
+    }
+    this._fileHandle._openSyncHandles--
+    this._bytes = null
+  }
+}
+
 export class FileHandle {
   constructor (name = '', file = new File([], name), writable = true, parent = null) {
     this._file = file
@@ -180,6 +270,7 @@ export class FileHandle {
     this.readable = true
     this._parent = parent
     this._openWritables = 0
+    this._openSyncHandles = 0
   }
 
   async getFile () {
@@ -193,6 +284,8 @@ export class FileHandle {
   async createWritable (opts) {
     if (!this.writable) throw new DOMException(...DISALLOWED)
     if (this._deleted) throw new DOMException(...GONE)
+    // A sync access handle holds an exclusive lock — block all new writables.
+    if (this._openSyncHandles > 0) throw new DOMException(...NO_MOD)
 
     const mode = opts.mode
 
@@ -219,6 +312,24 @@ export class FileHandle {
     return new Sink(this, file)
   }
 
+  /**
+   * Obtain a synchronous access handle.  Acquires an exclusive lock — no other
+   * writable or sync access handle may be opened while this lock is held.
+   *
+   * @returns {Promise<MemorySyncAdapter>}
+   */
+  async createSyncAccessHandle () {
+    if (!this.writable) throw new DOMException(...DISALLOWED)
+    if (this._deleted) throw new DOMException(...GONE)
+    if (this._openWritables > 0 || this._openSyncHandles > 0) {
+      throw new DOMException(...NO_MOD)
+    }
+    // Eagerly materialise the current file content into a mutable Uint8Array.
+    const bytes = new Uint8Array(await this._file.arrayBuffer())
+    this._openSyncHandles++
+    return new MemorySyncAdapter(this, bytes)
+  }
+
   async isSameEntry (other) {
     if (this === other) return true
     if (this.kind !== other.kind) return false
@@ -239,7 +350,7 @@ export class FileHandle {
 
   async move (dest, newName) {
     if (this._deleted) throw new DOMException(...GONE)
-    if (this._openWritables > 0) throw new DOMException(...NO_MOD)
+    if (this._openWritables > 0 || this._openSyncHandles > 0) throw new DOMException(...NO_MOD)
 
     if (newName === '') throw new TypeError('Name cannot be empty.')
     if (newName && (newName.includes('/') || newName.includes('\\') || newName === '.' || newName === '..')) {
@@ -279,7 +390,7 @@ export class FileHandle {
   }
 
   async _destroy () {
-    if (this._openWritables > 0) throw new DOMException(...NO_MOD)
+    if (this._openWritables > 0 || this._openSyncHandles > 0) throw new DOMException(...NO_MOD)
     this._deleted = true
     this._file = null
   }
@@ -385,7 +496,7 @@ export class FolderHandle {
   async _destroy (recursive) {
     // Check for locks first
     const checkLocks = (handle) => {
-      if (handle.kind === 'file' && handle._openWritables > 0) return true
+      if (handle.kind === 'file' && (handle._openWritables > 0 || handle._openSyncHandles > 0)) return true
       if (handle.kind === 'directory') {
         for (const entry of Object.values(handle._entries)) {
           if (checkLocks(entry)) return true

@@ -45,6 +45,23 @@ class FileSystemFileHandle extends FileSystemHandle {
   }
 
   /**
+   * Obtain a synchronous read/write handle to this file.
+   *
+   * The returned `FileSystemSyncAccessHandle` holds an exclusive lock on the
+   * underlying file: no `FileSystemWritableFileStream` or other
+   * `FileSystemSyncAccessHandle` may be opened while the lock is held.
+   *
+   * All methods on the returned handle are synchronous.
+   *
+   * @returns {Promise<import('./FileSystemSyncAccessHandle.js').FileSystemSyncAccessHandle>}
+   */
+  async createSyncAccessHandle () {
+    const { FileSystemSyncAccessHandle } = await import('./FileSystemSyncAccessHandle.js')
+    const adapter = await this[kAdapter].createSyncAccessHandle()
+    return new FileSystemSyncAccessHandle(adapter)
+  }
+
+  /**
    * @param {FileSystemDirectoryHandle|string} destinationDirectoryOrNewName
    * @param {string} [newName]
    */
@@ -80,6 +97,7 @@ Object.defineProperties(FileSystemFileHandle.prototype, {
     configurable: true,
   },
   createWritable: { enumerable: true },
+  createSyncAccessHandle: { enumerable: true },
   getFile: { enumerable: true },
   move: { enumerable: true }
 })
