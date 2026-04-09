@@ -126,7 +126,7 @@ Object.defineProperties(FileSystemDirectoryHandle.prototype, {
 	removeEntry: { enumerable: true }
 })
 
-if (globalThis.FileSystemDirectoryHandle) {
+if (false && globalThis.FileSystemDirectoryHandle) {
   const proto = globalThis.FileSystemDirectoryHandle.prototype
 
   proto.resolve = async function resolve (possibleDescendant) {
