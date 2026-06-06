@@ -49,11 +49,11 @@ async function showOpenFilePicker (options = {}) {
   const p = import('./util.js')
 
   const evt = await new Promise(resolve => {
-    input.onchange = input.onchange = resolve
+    input.onchange = input.oncancel = resolve
     input.click()
   })
 
-  input.onchange = input.onchange = null
+  input.onchange = input.oncancel = null
   input.remove()
 
   if (evt.type === 'cancel') {
